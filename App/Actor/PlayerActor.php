@@ -17,11 +17,24 @@ use EasySwoole\FastCache\Cache;
 
 class PlayerActor extends AbstractActor
 {
+    /** @var int 加入房间 */
+    const JOIN_ROOM = 10000;
+    /** @var int 退出房间 */
+    const QUIT_ROOM = 10004;
+    /** @var int 叫地主 */
+    const CALL_LANDLOAD = 10001;
+    /** @var int 出牌 */
+    const SEND_CARD = 10002;
+    /** @var int 不出 */
+    const PASS_CADR = 10003;
+    /** @var int 超级加倍 */
+    const DOUBLE_MULTIPLE = 10005;
+    /** @var int 明牌 */
+    const OPEN_CADR = 10006;
 
     private $fd;
     private $roomId;
 
-    const CALL_LANDLOAD = 10001;
 
     public static function configure(ActorConfig $actorConfig)
     {
@@ -41,14 +54,9 @@ class PlayerActor extends AbstractActor
             if (!($msg instanceof Command)){
                 return false;
             }
-
+            // self:: 部分的 都是ws发过来操作 自己转发给room的
+            // RoomActor:: 部分的  都是Room处理完 要我们转发回前端的
             switch ($msg->getDo()) {
-                case RoomActor::JOIN_ROOM:
-                    $this->roomId = $msg->getData()['roomId'];
-                    // 通知ROOM
-                    $this->sendMyRoom($msg);
-                    break;
-
                 case RoomActor::GAME_START:
                     $WsCommand = new WsCommand();
                     $WsCommand->setClass("game");
@@ -78,6 +86,11 @@ class PlayerActor extends AbstractActor
                     ]);
 
                     $send[] = $WsCommand;
+                    break;
+
+                case self::JOIN_ROOM:
+                    $this->roomId = $msg->getData()['roomId'];
+                    $this->sendMyRoom($msg);
                     break;
 
                 case self::CALL_LANDLOAD:

@@ -1,6 +1,9 @@
 <?php
 /**
  * websocket游戏逻辑
+ *
+ * 在这里不应该出现操作RoomActor的情况，不然有权限风险
+ *
  * User: Siam
  * Date: 2020/5/18
  * Time: 10:23
@@ -11,7 +14,6 @@ namespace App\WebSocket;
 
 use App\Actor\Command;
 use App\Actor\PlayerActor;
-use App\Actor\RoomActor;
 use EasySwoole\FastCache\Cache;
 use EasySwoole\Socket\AbstractInterface\Controller;
 
@@ -35,7 +37,7 @@ class Game extends Controller
         $actorId = Cache::getInstance()->get("player_{$fd}");
 
         $command = new Command();
-        $command->setDo(RoomActor::JOIN_ROOM);
+        $command->setDo(PlayerActor::JOIN_ROOM);
         $command->setData([
             'player' => $actorId,
             'roomId' => $roomId,

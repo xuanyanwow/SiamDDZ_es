@@ -17,15 +17,14 @@ use EasySwoole\Component\Timer;
 class RoomActor extends AbstractActor
 {
 
-    /** @var int 加入房间 */
-    const JOIN_ROOM = 1;
     /** @var int 游戏开始 */
     const GAME_START = 2;
     /** @var int 发牌 */
     const GAME_SEND_CARD = 3;
     /** @var int 询问是否叫地主 */
     const GAME_ASK_CALL_LANDLOAD = 4;
-
+    /** @var int 增加倍数 */
+    const GAME_ADD_MULTIPLE = 5;
 
     /** @var array 洗牌后储存的 */
     private $pokerCard = [];
@@ -74,19 +73,33 @@ class RoomActor extends AbstractActor
         }
 
         switch ($msg->getDo()) {
-            case self::JOIN_ROOM:
+            case PlayerActor::JOIN_ROOM:
                 $this->playerList[] = $msg->getData()['player'];
                 break;
+
             case PlayerActor::CALL_LANDLOAD:
                 if(!$this->canDo($msg->getData()['actorId'])) return false;
                 if ($msg->getData()['result'] === true){
-                    // 叫地主成功 倍数*2
-                    echo "叫地主";
                     $this->multiple = $this->multiple * 2;
+                    // todo 叫地主成功 倍数*2
+                    // RoomActor::GAME_ADD_MULTIPLE
+
+                    // todo 地主牌展示，发给地主
                 }else{
-                    echo "不叫";
+                    // todo 需要记录重开次数、已经操作的人；如果全部不叫则重开，重开3次则最后一个玩家强制当地主
                 }
 
+                break;
+
+            case PlayerActor::SEND_CARD:
+                // todo 判断出牌是否符合逻辑、是否玩家拥有所有牌；
+                // 是则删除剩余牌
+                // 是否增加倍数
+                // 判断是否胜利
+                // 胜利则结算
+                break;
+
+            case PlayerActor::PASS_CADR:
                 break;
         }
 
