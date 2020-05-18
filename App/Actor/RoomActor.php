@@ -68,8 +68,8 @@ class RoomActor extends AbstractActor
      */
     protected function onMessage($msg)
     {
-        if (!($msg instanceof Command)){
-            return false;
+        if (!($msg instanceof Command)) {
+            return FALSE;
         }
 
         switch ($msg->getDo()) {
@@ -78,14 +78,14 @@ class RoomActor extends AbstractActor
                 break;
 
             case PlayerActor::CALL_LANDLOAD:
-                if(!$this->canDo($msg->getData()['actorId'])) return false;
-                if ($msg->getData()['result'] === true){
+                if (!$this->canDo($msg->getData()['actorId'])) return FALSE;
+                if ($msg->getData()['result'] === TRUE) {
                     $this->multiple = $this->multiple * 2;
                     // todo 叫地主成功 倍数*2
                     // RoomActor::GAME_ADD_MULTIPLE
 
                     // todo 地主牌展示，发给地主
-                }else{
+                } else {
                     // todo 需要记录重开次数、已经操作的人；如果全部不叫则重开，重开3次则最后一个玩家强制当地主
                 }
 
@@ -103,7 +103,7 @@ class RoomActor extends AbstractActor
                 break;
         }
 
-        return false;
+        return FALSE;
     }
 
     protected function onExit($arg)
@@ -146,9 +146,9 @@ class RoomActor extends AbstractActor
         // 分割成三份基础牌
         $tem = array_chunk($all, 17);
 
-        foreach ($this->playerList as $key => $player){
+        foreach ($this->playerList as $key => $player) {
             // 排序
-            $final = $this->sortPorker($tem[$key]);
+            $final                     = $this->sortPorker($tem[$key]);
             $this->playerCard[$player] = $final;
         }
         $this->landloadCard = $this->sortPorker($tem[3]);
@@ -181,7 +181,7 @@ class RoomActor extends AbstractActor
         $command = new Command();
         $command->setDo(self::GAME_START);
 
-        foreach ($this->playerList as $player){
+        foreach ($this->playerList as $player) {
             try {
                 PlayerActor::client()->send($player, [$command]);
             } catch (InvalidActor $e) {
@@ -192,12 +192,12 @@ class RoomActor extends AbstractActor
         // 叫地主的人 第一次就第一个，后面的就谁赢了谁先叫
         $firstPlayerId = $this->playerList[0];
 
-        foreach ($this->playerList as $player){
+        foreach ($this->playerList as $player) {
             // 发基础牌
             $command = new Command();
             $command->setDo(self::GAME_SEND_CARD);
             $command->setData($this->playerCard[$player]);
-            $send = [];
+            $send   = [];
             $send[] = $command;
             // 通知哪个玩家叫地主
             $callLandLoad = new Command();
@@ -223,13 +223,13 @@ class RoomActor extends AbstractActor
     private function sortPorker($cards)
     {
         $new = [];
-        foreach ($cards as $card){
+        foreach ($cards as $card) {
             $new[] = [$card[0], substr($card, 1)];
         }
 
         usort($new, 'sortPokerCard');
         $final = [];
-        foreach ($new as  $value){
+        foreach ($new as $value) {
             $final[] = $value[0].$value[1];
         }
         return $final;
@@ -243,5 +243,17 @@ class RoomActor extends AbstractActor
     private function canDo($playerActorId)
     {
         return $this->nowPlayer == $playerActorId;
+    }
+
+    /**
+     * 房间状态重置，在一局结束后清理
+     */
+    private function reset()
+    {
+        $this->nowPlayer    = NULL;
+        $this->timerId      = NULL;
+        $this->playerCard   = [];
+        $this->landloadCard = [];
+        $this->multiple     = 1;
     }
 }
