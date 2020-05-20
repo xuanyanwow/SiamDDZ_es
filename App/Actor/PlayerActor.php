@@ -88,6 +88,39 @@ class PlayerActor extends AbstractActor
                     $send[] = $WsCommand;
                     break;
 
+                case RoomActor::GAME_ADD_MULTIPLE:
+                    $WsCommand = new WsCommand();
+                    $WsCommand->setClass("game");
+                    $WsCommand->setAction("add_multiple");
+                    $WsCommand->setData([
+                        'multiple' => $msg->getData()['multiple'],
+                    ]);
+
+                    $send[] = $WsCommand;
+                    break;
+
+                case RoomActor::GAME_WHO_TOBE_LANDLOAD:
+                    $WsCommand = new WsCommand();
+                    $WsCommand->setClass("game");
+                    $WsCommand->setAction("who_tobe_landload");
+                    $WsCommand->setData([
+                        'player' => $msg->getData()['player'],
+                    ]);
+
+                    $send[] = $WsCommand;
+                    break;
+
+                case RoomActor::GAME_SHOW_LANDLOAD_CARD:
+                    $WsCommand = new WsCommand();
+                    $WsCommand->setClass("game");
+                    $WsCommand->setAction("show_landload_card");
+                    $WsCommand->setData([
+                        'cards' => $msg->getData()['cards'],
+                    ]);
+
+                    $send[] = $WsCommand;
+                    break;
+
                 case self::JOIN_ROOM:
                     $this->roomId = $msg->getData()['roomId'];
                     $this->sendMyRoom($msg);

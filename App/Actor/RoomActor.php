@@ -25,6 +25,10 @@ class RoomActor extends AbstractActor
     const GAME_ASK_CALL_LANDLOAD = 4;
     /** @var int 增加倍数 */
     const GAME_ADD_MULTIPLE = 5;
+    /** @var int 展示地主牌 */
+    const GAME_SHOW_LANDLOAD_CARD = 6;
+    /** @var int 谁成为地主 */
+    const GAME_WHO_TOBE_LANDLOAD=7;
 
     /** @var array 洗牌后储存的 */
     private $pokerCard = [];
@@ -40,6 +44,11 @@ class RoomActor extends AbstractActor
     private $multiple = 1;
     /** @var mixed 当前操作用户 */
     private $nowPlayer;
+    /** @var mixed 地主玩家 */
+    private $landloadPlayer;
+
+    /** @var int 每轮操作的间隔 */
+    const PERIOD_TIME = 10;
 
     public static function configure(ActorConfig $actorConfig)
     {
@@ -78,13 +87,55 @@ class RoomActor extends AbstractActor
                 break;
 
             case PlayerActor::CALL_LANDLOAD:
+                $this->clearTimer();
                 if (!$this->canDo($msg->getData()['actorId'])) return FALSE;
                 if ($msg->getData()['result'] === TRUE) {
+                    $send   = [];
                     $this->multiple = $this->multiple * 2;
                     // todo 叫地主成功 倍数*2
                     // RoomActor::GAME_ADD_MULTIPLE
+                    $this->landloadPlayer = $msg->getData()['actorId'];
+                    $this->multiple = $this->multiple * 2;
+                    $multipleCommand = new Command();
+                    $multipleCommand->setDo(self::GAME_ADD_MULTIPLE);
+                    $multipleCommand->setData([
+                        'multiple' => 2
+                    ]);
+                    $send[] = $multipleCommand;
 
-                    // todo 地主牌展示，发给地主
+                    $landloadCommand = new Command();
+                    $landloadCommand->setDo(self::GAME_WHO_TOBE_LANDLOAD);
+                    $landloadCommand->setData([
+                        'player' => $this->landloadPlayer
+                    ]);
+                    $send[] = $landloadCommand;
+
+                    $showCardCommand = new Command();
+                    $showCardCommand->setDo(self::GAME_SHOW_LANDLOAD_CARD);
+                    $showCardCommand->setData([
+                        'cards' => $this->landloadCard
+                    ]);
+                    $send[] = $showCardCommand;
+
+                    foreach ($this->landloadCard as $card) {
+                        $this->playerCard[$this->landloadPlayer][] = $card;
+                    }
+
+                    foreach ($this->playerList as $player) {
+                        try {
+                            PlayerActor::client()->send($player, $send);
+                        } catch (InvalidActor $e) {
+                            // 通知失败 游戏结束
+                        }
+                    }
+
+                    $cardCommand = new Command();
+                    $cardCommand->setDo(self::GAME_SEND_CARD);
+                    $cardCommand->setData($this->landloadCard);
+                    try {
+                        PlayerActor::client()->send($this->landloadPlayer, [$cardCommand]);
+                    } catch (InvalidActor $e) {
+                    }
                 } else {
                     // todo 需要记录重开次数、已经操作的人；如果全部不叫则重开，重开3次则最后一个玩家强制当地主
                 }
@@ -212,6 +263,9 @@ class RoomActor extends AbstractActor
             }
         }
         // 叫地主定时器
+        $this->timerId = Timer::getInstance()->after(self::PERIOD_TIME * 1000, function(){
+            $this->nextCallLandLoad();
+        });
         $this->nowPlayer = $firstPlayerId;
     }
 
@@ -255,5 +309,52 @@ class RoomActor extends AbstractActor
         $this->playerCard   = [];
         $this->landloadCard = [];
         $this->multiple     = 1;
+    }
+
+    /**
+     * 通知下一个玩家叫地主
+     */
+    private function nextCallLandLoad()
+    {
+        $send   = [];
+        // 通知哪个玩家叫地主
+        $callLandLoad = new Command();
+        $callLandLoad->setDo(self::GAME_ASK_CALL_LANDLOAD);
+        $callLandLoad->setData($this->getNextPlayer());
+
+        $send[] = $callLandLoad;
+        try {
+            PlayerActor::client()->send($this->nowPlayer, $send);
+        } catch (InvalidActor $e) {
+            // 通知失败 游戏结束
+        }
+        // 同样设置定时器
+        $this->clearTimer();
+        $this->timerId = Timer::getInstance()->after(self::PERIOD_TIME * 1000, function(){
+            $this->nextCallLandLoad();
+        });
+    }
+
+    /**
+     * 轮到下一个玩家，并且更改nowPlayer属性
+     * @return mixed|string
+     */
+    private function getNextPlayer()
+    {
+        $index = array_search($this->nowPlayer, $this->playerList);
+        if ($index === false){
+            return "";
+        }
+        if ($index===count($this->playerList) - 1){
+            $this->nowPlayer = $this->playerList[0];
+        }else{
+            $this->nowPlayer = $this->playerList[++$index];
+        }
+        return $this->nowPlayer;
+    }
+
+    private function clearTimer()
+    {
+        Timer::getInstance()->clear($this->timerId);
     }
 }
