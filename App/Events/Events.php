@@ -17,8 +17,8 @@ class Events
     {
         if ($workerId == 1) {
             go(function () {
-                \co::sleep(2);
-                for ($i = 1; $i <= 1; $i++) {
+                \co::sleep(1);
+                for ($i = 1; $i <= 2; $i++) {
                     $roomActorId = RoomActor::client()->create();
                     Cache::getInstance()->set("room_{$i}", $roomActorId);
                 }
