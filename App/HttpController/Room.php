@@ -13,6 +13,11 @@ use EasySwoole\FastCache\Cache;
 
 class Room extends Base
 {
+
+    /**
+     * 获取房间状态
+     * @Param(name="roomId",from={GET,POST},notEmpty="不能为空")
+     */
     public function getInfo()
     {
         // 房间id
@@ -23,5 +28,58 @@ class Room extends Base
             return;
         }
         $this->response()->write('ok');
+    }
+
+    /**
+     * 加入房间
+     * @Param(name="roomId",from={GET,POST},notEmpty="不能为空")
+     */
+    public function join()
+    {
+
+    }
+
+    // ***************** 以下接口，从用户信息中获取所在房间信息
+
+    /**
+     * 退出房间
+     */
+    public function quit()
+    {
+
+    }
+
+    /**
+     * 准备开始
+     */
+    public function preStart()
+    {
+
+    }
+
+    /**
+     * 取消准备开始
+     */
+    public function cancelStart()
+    {
+
+    }
+
+    /**
+     * 叫地主操作
+     * @Param(name="result",from={GET,POST},notEmpty="不能为空")
+     */
+    public function callRich()
+    {
+
+    }
+
+    /**
+     * 出牌操作
+     * @Param(name="cards",from={GET,POST},notEmpty="不能为空")
+     */
+    public function sendCard()
+    {
+
     }
 }
