@@ -10,9 +10,8 @@ namespace App\HttpController;
 
 
 use EasySwoole\FastCache\Cache;
-use EasySwoole\Http\AbstractInterface\Controller;
 
-class Room extends Controller
+class Room extends Base
 {
     public function getInfo()
     {
