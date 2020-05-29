@@ -16,19 +16,40 @@ use EasySwoole\Component\Timer;
 
 class RoomActor extends AbstractActor
 {
-
+    /** @var int 玩家进入 */
+    const GAME_JOIN_PLAYER = 1;
+    /** @var int 玩家退出 */
+    const GAME_QUIT_PLAYER = 2;
+    /** @var int 玩家准备开始 */
+    const GAME_PRE_START = 3;
+    /** @var int 玩家取消准备 */
+    const GAME_CANCEL_START = 4;
     /** @var int 游戏开始 */
-    const GAME_START = 2;
+    const GAME_START = 5;
     /** @var int 发牌 */
-    const GAME_SEND_CARD = 3;
-    /** @var int 询问是否叫地主 */
-    const GAME_ASK_CALL_LANDLOAD = 4;
-    /** @var int 增加倍数 */
-    const GAME_ADD_MULTIPLE = 5;
+    const GAME_SEND_CARD = 6;
+    /** @var int 轮到叫地主操作 */
+    const GAME_ASK_CALL_RICH = 7;
+    /** @var int 玩家叫地主操作 */
+    const GAME_CALL_RICH = 8;
+    /** @var int 无人叫地主 重开 */
+    const GAME_NOT_RICH_RESTART = 9;
     /** @var int 展示地主牌 */
-    const GAME_SHOW_LANDLOAD_CARD = 6;
-    /** @var int 谁成为地主 */
-    const GAME_WHO_TOBE_LANDLOAD=7;
+    const GAME_SHOW_LANDLOAD_CARD = 10;
+    /** @var int 玩家加牌(叫地主后) */
+    const GAME_PLAYER_ADD_CARD = 11;
+    /** @var int 玩家出牌 */
+    const GAME_PLAYER_USE_CARD =12;
+    /** @var int 玩家不出牌 */
+    const GAME_PLAYER_PASS_CARD = 13;
+    /** @var int 游戏结束 */
+    const GAME_END = 14;
+    /** @var int 游戏增加倍数 */
+    const GAME_ADD_MULTIPLE = 15;
+
+    /** @var int 发送消息给PlayerActor */
+    const Message = 99;
+
 
     /** @var array 洗牌后储存的 */
     private $pokerCard = [];
@@ -39,13 +60,13 @@ class RoomActor extends AbstractActor
     /** @var array 游戏开始后 每个玩家的牌 key为playerActorId */
     private $playerCard = [];
     /** @var array 三张地主牌 */
-    private $landloadCard = [];
+    private $richCards = [];
     /** @var int 房间倍数 默认1倍 */
     private $multiple = 1;
     /** @var mixed 当前操作用户 */
     private $nowPlayer;
     /** @var mixed 地主玩家 */
-    private $landloadPlayer;
+    private $richPlayer;
 
     /** @var int 每轮操作的间隔 */
     const PERIOD_TIME = 10;
@@ -82,21 +103,27 @@ class RoomActor extends AbstractActor
         }
 
         switch ($msg->getDo()) {
-            case PlayerActor::JOIN_ROOM:
+            case PlayerActor::JOIN_ROOM: // 进入房间
+                if (count($this->playerList) >= 3){
+                    return false;
+                }
+                if (in_array($msg->getData()['player'], $this->playerList)){
+                    return false;
+                }
                 $this->playerList[] = $msg->getData()['player'];
                 break;
 
-            case PlayerActor::CALL_LANDLOAD:
+            case PlayerActor::CALL_RICH: // 叫地主
                 $this->clearTimer();
                 if (!$this->canDo($msg->getData()['actorId'])) return FALSE;
+
                 if ($msg->getData()['result'] === TRUE) {
                     $send   = [];
                     $this->multiple = $this->multiple * 2;
-                    // todo 叫地主成功 倍数*2
-                    // RoomActor::GAME_ADD_MULTIPLE
-                    $this->landloadPlayer = $msg->getData()['actorId'];
-                    $this->multiple = $this->multiple * 2;
-                    $multipleCommand = new Command();
+
+                    $this->richPlayer = $msg->getData()['actorId'];
+                    $this->multiple   = $this->multiple * 2;
+                    $multipleCommand  = new Command();
                     $multipleCommand->setDo(self::GAME_ADD_MULTIPLE);
                     $multipleCommand->setData([
                         'multiple' => 2
@@ -104,51 +131,37 @@ class RoomActor extends AbstractActor
                     $send[] = $multipleCommand;
 
                     $landloadCommand = new Command();
-                    $landloadCommand->setDo(self::GAME_WHO_TOBE_LANDLOAD);
+                    $landloadCommand->setDo(self::GAME_CALL_RICH);
                     $landloadCommand->setData([
-                        'player' => $this->landloadPlayer
+                        'player' => $this->richPlayer
                     ]);
                     $send[] = $landloadCommand;
 
                     $showCardCommand = new Command();
                     $showCardCommand->setDo(self::GAME_SHOW_LANDLOAD_CARD);
                     $showCardCommand->setData([
-                        'cards' => $this->landloadCard
+                        'cards' => $this->richCards
                     ]);
                     $send[] = $showCardCommand;
 
-                    foreach ($this->landloadCard as $card) {
-                        $this->playerCard[$this->landloadPlayer][] = $card;
+                    foreach ($this->richCards as $card) {
+                        $this->playerCard[$this->richPlayer][] = $card;
                     }
 
-                    foreach ($this->playerList as $player) {
-                        try {
-                            PlayerActor::client()->send($player, $send);
-                        } catch (InvalidActor $e) {
-                            // 通知失败 游戏结束
-                        }
-                    }
-
-                    $cardCommand = new Command();
-                    $cardCommand->setDo(self::GAME_SEND_CARD);
-                    $cardCommand->setData($this->landloadCard);
-                    try {
-                        PlayerActor::client()->send($this->landloadPlayer, [$cardCommand]);
-                    } catch (InvalidActor $e) {
-                    }
+                    $this->sendToPlayer($send);
                 } else {
                     // todo 需要记录重开次数、已经操作的人；如果全部不叫则重开，重开3次则最后一个玩家强制当地主
                 }
 
                 break;
-
-            case PlayerActor::SEND_CARD:
-                // todo 判断出牌是否符合逻辑、是否玩家拥有所有牌；
-                // 是则删除剩余牌
-                // 是否增加倍数
-                // 判断是否胜利
-                // 胜利则结算
-                break;
+            //
+            // case PlayerActor::SEND_CARD:
+            //     // todo 判断出牌是否符合逻辑、是否玩家拥有所有牌；
+            //     // 是则删除剩余牌
+            //     // 是否增加倍数
+            //     // 判断是否胜利
+            //     // 胜利则结算
+            //     break;
 
             case PlayerActor::PASS_CADR:
                 break;
@@ -202,7 +215,7 @@ class RoomActor extends AbstractActor
             $final                     = $this->sortPorker($tem[$key]);
             $this->playerCard[$player] = $final;
         }
-        $this->landloadCard = $this->sortPorker($tem[3]);
+        $this->richCards = $this->sortPorker($tem[3]);
 
         // $c = ['H','S','D','C'];
         // $n = [1,2,3,4,5,6,7,8,9,10,11,12,13];
@@ -304,11 +317,11 @@ class RoomActor extends AbstractActor
      */
     private function reset()
     {
-        $this->nowPlayer    = NULL;
-        $this->timerId      = NULL;
-        $this->playerCard   = [];
-        $this->landloadCard = [];
-        $this->multiple     = 1;
+        $this->nowPlayer  = NULL;
+        $this->timerId    = NULL;
+        $this->playerCard = [];
+        $this->richCards  = [];
+        $this->multiple   = 1;
     }
 
     /**
@@ -356,5 +369,20 @@ class RoomActor extends AbstractActor
     private function clearTimer()
     {
         Timer::getInstance()->clear($this->timerId);
+    }
+
+    /**
+     * 每一次通知必须是全部用户公平通知 不能私发
+     * @param $command
+     */
+    private function sendToPlayer($command)
+    {
+        foreach ($this->playerList as $player) {
+            try {
+                PlayerActor::client()->send($player, $command);
+            } catch (InvalidActor $e) {
+                echo $e->getMessage().PHP_EOL;
+            }
+        }
     }
 }

@@ -9,6 +9,9 @@
 namespace App\HttpController;
 
 
+use App\Actor\Command;
+use App\Actor\PlayerActor;
+use EasySwoole\Actor\Exception\InvalidActor;
 use EasySwoole\FastCache\Cache;
 
 class Room extends Base
@@ -24,7 +27,7 @@ class Room extends Base
         $roomId      = $this->request()->getRequestParam("roomId");
         $roomActorId = Cache::getInstance()->get("room_{$roomId}");
         if (!$roomActorId) {
-            $this->response()->write("房间不存在");
+            $this->writeJson(400, null, "房间不存在");
             return;
         }
         $this->response()->write('ok');
@@ -36,7 +39,28 @@ class Room extends Base
      */
     public function join()
     {
+        // 房间id
+        $roomId      = $this->request()->getRequestParam("roomId");
+        $roomActorId = Cache::getInstance()->get("room_{$roomId}");
+        if (!$roomActorId) {
+            $this->writeJson(400, null, "房间不存在");
+            return ;
+        }
 
+        $fd      = $this->who();
+        $actorId = Cache::getInstance()->get("player_{$fd}");
+        $command = new Command();
+        $command->setDo(PlayerActor::JOIN_ROOM);
+        $command->setData([
+            'player' => $actorId,
+            'roomId' => $roomId,
+        ]);
+        try {
+            PlayerActor::client()->send($actorId, [$command]);
+        } catch (InvalidActor $e) {
+            $this->writeJson(400, null, "Player Actor 通信失败");
+        }
+        $this->writeJson(200, null, "加入房间成功");
     }
 
     // ***************** 以下接口，从用户信息中获取所在房间信息

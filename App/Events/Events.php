@@ -5,6 +5,7 @@ namespace App\Events;
 
 use App\Actor\PlayerActor;
 use App\Actor\RoomActor;
+use App\WebSocket\WsCommand;
 use EasySwoole\FastCache\Cache;
 use Swoole\Http\Request;
 use Swoole\WebSocket\Server;
@@ -37,6 +38,14 @@ class Events
             "fd" => $request->fd,
         ]);
         Cache::getInstance()->set("player_{$request->fd}", $actorId);
+        // 签发一个随机token给前端
+        $wsCommand = new WsCommand();
+        $wsCommand->setClass("user");
+        $wsCommand->setAction("auth");
+        $wsCommand->setData([
+            'token' => base64_encode($request->fd)
+        ]);
+        $server->push($request->fd, json_encode($wsCommand, 256));
     }
 
     public static function onClose(Server $server, int $fd, int $reactorId)

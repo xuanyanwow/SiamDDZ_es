@@ -9,7 +9,6 @@
 namespace App\Actor;
 
 
-use App\WebSocket\WsCommand;
 use EasySwoole\Actor\AbstractActor;
 use EasySwoole\Actor\ActorConfig;
 use EasySwoole\EasySwoole\ServerManager;
@@ -22,9 +21,9 @@ class PlayerActor extends AbstractActor
     /** @var int 退出房间 */
     const QUIT_ROOM = 10004;
     /** @var int 叫地主 */
-    const CALL_LANDLOAD = 10001;
+    const CALL_RICH = 10001;
     /** @var int 出牌 */
-    const SEND_CARD = 10002;
+    const USE_CARD = 10002;
     /** @var int 不出 */
     const PASS_CADR = 10003;
     /** @var int 超级加倍 */
@@ -57,68 +56,13 @@ class PlayerActor extends AbstractActor
             // self:: 部分的 都是ws发过来操作 自己转发给room的
             // RoomActor:: 部分的  都是Room处理完 要我们转发回前端的
             switch ($msg->getDo()) {
-                case RoomActor::GAME_START:
-                    $WsCommand = new WsCommand();
-                    $WsCommand->setClass("game");
-                    $WsCommand->setAction("start");
+                case RoomActor::Message :
+                    $WsCommand = $msg->getData();
 
-                    $send[] = $WsCommand;
-                    break;
+                    if ($WsCommand){
+                        $send = $WsCommand;
+                    }
 
-                case RoomActor::GAME_SEND_CARD:
-                    $card = $msg->getData();
-
-                    $WsCommand = new WsCommand();
-                    $WsCommand->setClass("game");
-                    $WsCommand->setAction("send_card");
-                    $WsCommand->setData($card);
-
-                    $send[] = $WsCommand;
-                    break;
-
-                case RoomActor::GAME_ASK_CALL_LANDLOAD:
-                    $WsCommand = new WsCommand();
-                    $WsCommand->setClass("game");
-                    $WsCommand->setAction("call_landload");
-                    $WsCommand->setData([
-                        'isMe' => $msg->getData() == $this->actorId() ? true : false,
-                        // 这里可以加一个结束时间 配合后端定时器
-                    ]);
-
-                    $send[] = $WsCommand;
-                    break;
-
-                case RoomActor::GAME_ADD_MULTIPLE:
-                    $WsCommand = new WsCommand();
-                    $WsCommand->setClass("game");
-                    $WsCommand->setAction("add_multiple");
-                    $WsCommand->setData([
-                        'multiple' => $msg->getData()['multiple'],
-                    ]);
-
-                    $send[] = $WsCommand;
-                    break;
-
-                case RoomActor::GAME_WHO_TOBE_LANDLOAD:
-                    $WsCommand = new WsCommand();
-                    $WsCommand->setClass("game");
-                    $WsCommand->setAction("who_tobe_landload");
-                    $WsCommand->setData([
-                        'player' => $msg->getData()['player'],
-                    ]);
-
-                    $send[] = $WsCommand;
-                    break;
-
-                case RoomActor::GAME_SHOW_LANDLOAD_CARD:
-                    $WsCommand = new WsCommand();
-                    $WsCommand->setClass("game");
-                    $WsCommand->setAction("show_landload_card");
-                    $WsCommand->setData([
-                        'cards' => $msg->getData()['cards'],
-                    ]);
-
-                    $send[] = $WsCommand;
                     break;
 
                 case self::JOIN_ROOM:
@@ -126,9 +70,9 @@ class PlayerActor extends AbstractActor
                     $this->sendMyRoom($msg);
                     break;
 
-                case self::CALL_LANDLOAD:
+                case self::CALL_RICH:
                     $command = new Command();
-                    $command->setDo(self::CALL_LANDLOAD);
+                    $command->setDo(self::CALL_RICH);
                     $command->setData([
                         'actorId' => $this->actorId(),
                         'result'  => $msg->getData()['result'],
