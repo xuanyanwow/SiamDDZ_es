@@ -9,10 +9,12 @@
 namespace App\Actor;
 
 
+use App\WebSocket\WsCommand;
 use EasySwoole\Actor\AbstractActor;
 use EasySwoole\Actor\ActorConfig;
 use EasySwoole\Actor\Exception\InvalidActor;
 use EasySwoole\Component\Timer;
+use EasySwoole\FastCache\Cache;
 
 class RoomActor extends AbstractActor
 {
@@ -49,6 +51,8 @@ class RoomActor extends AbstractActor
 
     /** @var int 发送消息给PlayerActor */
     const Message = 99;
+    /** @var int 获取房间状态 */
+    const GAME_GET_INFO = 98;
 
 
     /** @var array 洗牌后储存的 */
@@ -94,7 +98,7 @@ class RoomActor extends AbstractActor
 
     /**
      * @param Command $msg
-     * @return bool
+     * @return mixed
      */
     protected function onMessage($msg)
     {
@@ -111,6 +115,20 @@ class RoomActor extends AbstractActor
                     return false;
                 }
                 $this->playerList[] = $msg->getData()['player'];
+                break;
+            case PlayerActor::QUIT_ROOM: // 退出房间
+                // 未开始则删除
+                // todo 开始了则更改为托管状态
+                $index = array_search($msg->getData()['player'], $this->playerList);
+                if ($index){
+                    unset($this->playerList[$index]);
+                }
+                $playerQuitCommand = new Command();
+                $playerQuitCommand->setDo(self::GAME_QUIT_PLAYER);
+                $playerQuitCommand->setData([
+                    'player' => $msg->getData()['player']
+                ]);
+                $send[] = $playerQuitCommand;
                 break;
 
             case PlayerActor::CALL_RICH: // 叫地主
@@ -130,12 +148,12 @@ class RoomActor extends AbstractActor
                     ]);
                     $send[] = $multipleCommand;
 
-                    $landloadCommand = new Command();
-                    $landloadCommand->setDo(self::GAME_CALL_RICH);
-                    $landloadCommand->setData([
+                    $playerQuitCommand = new Command();
+                    $playerQuitCommand->setDo(self::GAME_CALL_RICH);
+                    $playerQuitCommand->setData([
                         'player' => $this->richPlayer
                     ]);
-                    $send[] = $landloadCommand;
+                    $send[] = $playerQuitCommand;
 
                     $showCardCommand = new Command();
                     $showCardCommand->setDo(self::GAME_SHOW_LANDLOAD_CARD);
@@ -165,9 +183,17 @@ class RoomActor extends AbstractActor
 
             case PlayerActor::PASS_CADR:
                 break;
+            /** 获取房间状态：玩家信息、准备状态 */
+            case self::GAME_GET_INFO:
+                $command = new Command();
+                $command->setDo(PlayerActor::GET_INFO);
+                $replyData = $this->sendToPlayer([$command]);
+                break;
         }
 
-        return FALSE;
+        if (isset($replyData)){
+            return $replyData;
+        }
     }
 
     protected function onExit($arg)
@@ -241,17 +267,16 @@ class RoomActor extends AbstractActor
      */
     private function start()
     {
+        echo "游戏开始\n";
         // 通知游戏开始
-        $command = new Command();
-        $command->setDo(self::GAME_START);
+        $ws = new WsCommand();
+        $ws->setClass("game");
+        $ws->setAction("start");
 
-        foreach ($this->playerList as $player) {
-            try {
-                PlayerActor::client()->send($player, [$command]);
-            } catch (InvalidActor $e) {
-                // 通知失败 游戏结束
-            }
-        }
+        $command = new Command();
+        $command->setDo(self::Message);
+        $command->setData($ws);
+        $this->sendToPlayer([$command]);
 
         // 叫地主的人 第一次就第一个，后面的就谁赢了谁先叫
         $firstPlayerId = $this->playerList[0];
@@ -264,20 +289,28 @@ class RoomActor extends AbstractActor
             $send   = [];
             $send[] = $command;
             // 通知哪个玩家叫地主
+            $ws = new WsCommand();
+            $ws->setClass("game");
+            $ws->setAction("ask_call_rich");
+            $ws->setData([
+                'player'=>$firstPlayerId
+            ]);
+
             $callLandLoad = new Command();
-            $callLandLoad->setDo(self::GAME_ASK_CALL_LANDLOAD);
-            $callLandLoad->setData($firstPlayerId);
+            $callLandLoad->setDo(self::Message);
+            $callLandLoad->setData($ws);
 
             $send[] = $callLandLoad;
             try {
-                PlayerActor::client()->send($player, $send);
+                $playerActorId = Cache::getInstance()->get("player_{$player}");
+                PlayerActor::client()->send($playerActorId, $send);
             } catch (InvalidActor $e) {
                 // 通知失败 游戏结束
             }
         }
         // 叫地主定时器
         $this->timerId = Timer::getInstance()->after(self::PERIOD_TIME * 1000, function(){
-            $this->nextCallLandLoad();
+            echo "无人叫地主\n";
         });
         $this->nowPlayer = $firstPlayerId;
     }
@@ -325,30 +358,6 @@ class RoomActor extends AbstractActor
     }
 
     /**
-     * 通知下一个玩家叫地主
-     */
-    private function nextCallLandLoad()
-    {
-        $send   = [];
-        // 通知哪个玩家叫地主
-        $callLandLoad = new Command();
-        $callLandLoad->setDo(self::GAME_ASK_CALL_LANDLOAD);
-        $callLandLoad->setData($this->getNextPlayer());
-
-        $send[] = $callLandLoad;
-        try {
-            PlayerActor::client()->send($this->nowPlayer, $send);
-        } catch (InvalidActor $e) {
-            // 通知失败 游戏结束
-        }
-        // 同样设置定时器
-        $this->clearTimer();
-        $this->timerId = Timer::getInstance()->after(self::PERIOD_TIME * 1000, function(){
-            $this->nextCallLandLoad();
-        });
-    }
-
-    /**
      * 轮到下一个玩家，并且更改nowPlayer属性
      * @return mixed|string
      */
@@ -375,14 +384,20 @@ class RoomActor extends AbstractActor
      * 每一次通知必须是全部用户公平通知 不能私发
      * @param $command
      */
-    private function sendToPlayer($command)
+    private function sendToPlayer(array $command)
     {
+        $return = [];
         foreach ($this->playerList as $player) {
             try {
-                PlayerActor::client()->send($player, $command);
+                $playerActorId = Cache::getInstance()->get("player_{$player}");
+                $reply = PlayerActor::client()->send($playerActorId, $command);
+                if ($reply !== null){
+                    $return[] = $reply;
+                }
             } catch (InvalidActor $e) {
                 echo $e->getMessage().PHP_EOL;
             }
         }
+        return $return;
     }
 }

@@ -34,16 +34,22 @@ class Events
 
     public static function onOpen(Server $server, Request $request)
     {
+        $userId = time().rand(1,99);
+
         $actorId = PlayerActor::client()->create([
             "fd" => $request->fd,
+            "userId" => $userId,
         ]);
-        Cache::getInstance()->set("player_{$request->fd}", $actorId);
+
+        Cache::getInstance()->set("player_{$userId}", $actorId);
+        Cache::getInstance()->set("fd_to_actor_{$request->fd}", $actorId);
+
         // 签发一个随机token给前端
         $wsCommand = new WsCommand();
         $wsCommand->setClass("user");
         $wsCommand->setAction("auth");
         $wsCommand->setData([
-            'token' => base64_encode($request->fd)
+            'token' => base64_encode($userId),
         ]);
         $server->push($request->fd, json_encode($wsCommand, 256));
     }
@@ -52,7 +58,10 @@ class Events
     {
         $info = $server->getClientInfo($fd);
         if ($info && $info['websocket_status'] === WEBSOCKET_STATUS_FRAME) {
-            Cache::getInstance()->unset("player_{$fd}");
+            $playerActorId = Cache::getInstance()->get("fd_to_actor_{$fd}");
+            Cache::getInstance()->unset("fd_to_actor_{$fd}");
+            // 通知actor下线
+            PlayerActor::client()->exit($playerActorId);
         }
     }
 }

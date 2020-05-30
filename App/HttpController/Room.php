@@ -11,6 +11,7 @@ namespace App\HttpController;
 
 use App\Actor\Command;
 use App\Actor\PlayerActor;
+use App\Actor\RoomActor;
 use EasySwoole\Actor\Exception\InvalidActor;
 use EasySwoole\FastCache\Cache;
 
@@ -30,7 +31,10 @@ class Room extends Base
             $this->writeJson(400, null, "房间不存在");
             return;
         }
-        $this->response()->write('ok');
+        $command = new Command();
+        $command->setDo(RoomActor::GAME_GET_INFO);
+        $res = RoomActor::client()->send($roomActorId, $command);
+        $this->writeJson(200, $res, "success");
     }
 
     /**
@@ -47,12 +51,12 @@ class Room extends Base
             return ;
         }
 
-        $fd      = $this->who();
-        $actorId = Cache::getInstance()->get("player_{$fd}");
+        $userId      = $this->who();
+        $actorId = Cache::getInstance()->get("player_{$userId}");
         $command = new Command();
         $command->setDo(PlayerActor::JOIN_ROOM);
         $command->setData([
-            'player' => $actorId,
+            'player' => $userId,
             'roomId' => $roomId,
         ]);
         try {
