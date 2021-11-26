@@ -16,6 +16,13 @@ class Command extends SplBean
     protected $do;
     protected $data;
 
+    public static function make($do, $data)
+    {
+        $return = new static;
+        $return->setData($data);
+        $return->setDo($do);
+        return $return;
+    }
     /**
      * @return mixed
      */

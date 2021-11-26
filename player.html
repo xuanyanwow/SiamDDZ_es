@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>斗地主网页文字版</title>
+    <link rel="stylesheet" href="https://unpkg.com/element-ui/lib/theme-chalk/index.css">
+</head>
+<body>
+<div id="app">
+    <h3>房间信息</h3>
+    倍数: {{multiple}}
+    <br>
+    地主牌:<span v-for="card in rich_card_list" style="margin-right: 10px">{{card}}</span>
+    <br>
+    <h3>玩家列表</h3>
+    <el-row :gutter="20">
+        <el-col :span="6" v-for="player in player_info_list">
+            <!--角色标识-->
+            <div>
+                玩家{{ player.user_id }}
+                <span v-if="room_status !=='wait_start' && player.role">
+                    ：{{ player.role }}
+                </span>
+            </div>
+            <!--牌区-->
+            <div v-if="room_status !=='wait_start'">
+                剩余{{ player.card_number }}
+            </div>
+            <!--操作倒计时和提示-->
+            <div v-if="room_status !=='wait_start' && now_player === player.user_id">
+                {{ tick_end_time(end_time) }}s
+            </div>
+        </el-col>
+    </el-row>
+    <br>
+
+    <h3>出牌记录</h3>
+    <el-input
+            type="textarea"
+            :rows="10"
+            placeholder="记录"
+            v-model="log_list"
+            >
+    </el-input>
+
+    <h3>操作区</h3>
+    <el-row :gutter="20">
+        <el-col :span="8">
+            <el-checkbox-group v-model="check_card_list">
+                <el-checkbox-button v-for="(card, key) in card_list" :label="card" :key="key" border>
+                    {{show_card(card)}}
+                </el-checkbox-button>
+            </el-checkbox-group>.
+        </el-col>
+
+        <el-col :span="8" v-if="now_player === userId">
+
+            <el-button v-if="room_status ==='wait_start'">等待其他玩家加入，自动开始对局</el-button>
+
+            <el-button v-if="room_status ==='call_rich'" @click="do_call_rich(true)">叫地主</el-button>
+            <el-button v-if="room_status ==='call_rich'" @click="do_call_rich(false)">不叫</el-button>
+
+            <el-button v-if="room_status ==='show_card'">明牌</el-button>
+
+            <el-button v-if="room_status ==='use_card'" @click="do_use_card()">出牌</el-button>
+            <el-button v-if="room_status ==='use_card' && can_pass" @click="do_pass_card()">不要</el-button>
+        </el-col>
+
+<!--        <el-col :span="8">-->
+<!--            聊天室-->
+<!--        </el-col>-->
+    </el-row>
+</div>
+</body>
+<!-- import Vue before Element -->
+<script src="https://unpkg.com/vue@2.6.14/dist/vue.js"></script>
+<!-- import JavaScript -->
+<script src="https://unpkg.com/element-ui/lib/index.js"></script>
+<script src="/common.js"></script>
+<script src="/message_parser.js"></script>
+<script src="/index.js"></script>
+
+
+</html>

@@ -9,71 +9,133 @@
 namespace App\Actor;
 
 
+use App\Exceptions\DdzPokerCardTypException;
+use App\Repository\UserConnectInfoMap;
+use App\Utils\DdzPokerCardValidate;
+use App\Utils\PokerCard;
+use App\Utils\WsHelper;
 use App\WebSocket\WsCommand;
 use EasySwoole\Actor\AbstractActor;
 use EasySwoole\Actor\ActorConfig;
 use EasySwoole\Actor\Exception\InvalidActor;
 use EasySwoole\Component\Timer;
+use EasySwoole\EasySwoole\ServerManager;
 use EasySwoole\FastCache\Cache;
+use EasySwoole\Utility\Time;
 
 class RoomActor extends AbstractActor
 {
+    /** @var string 发送提示 */
+    const GAME_NOTICE = "game_notice";
+
     /** @var int 玩家进入 */
-    const GAME_JOIN_PLAYER = 1;
+    const GAME_JOIN_PLAYER = "do_join_player";
+    /** @var int 游戏开始 */
+    const GAME_START = "game_start";
+    /** @var int 玩家叫地主操作 */
+    const GAME_CALL_RICH = "call_rich";
+
+    /** @var int 游戏增加倍数 */
+    const GAME_CHANGE_MULTIPLE = "change_multiple";
+    /** @var int 游戏角色改变地主 */
+    const GAME_CHANGE_RICH = "change_rich";
+    /** @var int 展示地主牌 */
+    const GAME_SHOW_RICH_CARD = "show_rich_card";
+    /** @var int 改变玩家出牌权 */
+    const GAME_CHANGE_PLAYER_USE_CARD = "change_player_use_card";
+    /** @var int 玩家不出牌 */
+    const GAME_PLAYER_PASS_CARD = "player_pass_card";
+    /** @var int 玩家出牌 */
+    const GAME_PLAYER_USE_CARD = "player_use_card";
+    /** @var int 游戏结算 */
+    const GAME_SETTLE = "settle";
+
     /** @var int 玩家退出 */
     const GAME_QUIT_PLAYER = 2;
     /** @var int 玩家准备开始 */
     const GAME_PRE_START = 3;
     /** @var int 玩家取消准备 */
     const GAME_CANCEL_START = 4;
-    /** @var int 游戏开始 */
-    const GAME_START = 5;
-    /** @var int 发牌 */
-    const GAME_SEND_CARD = 6;
-    /** @var int 轮到叫地主操作 */
-    const GAME_ASK_CALL_RICH = 7;
-    /** @var int 玩家叫地主操作 */
-    const GAME_CALL_RICH = 8;
-    /** @var int 无人叫地主 重开 */
-    const GAME_NOT_RICH_RESTART = 9;
-    /** @var int 展示地主牌 */
-    const GAME_SHOW_LANDLOAD_CARD = 10;
-    /** @var int 玩家加牌(叫地主后) */
-    const GAME_PLAYER_ADD_CARD = 11;
-    /** @var int 玩家出牌 */
-    const GAME_PLAYER_USE_CARD =12;
-    /** @var int 玩家不出牌 */
-    const GAME_PLAYER_PASS_CARD = 13;
     /** @var int 游戏结束 */
     const GAME_END = 14;
-    /** @var int 游戏增加倍数 */
-    const GAME_ADD_MULTIPLE = 15;
-
-    /** @var int 发送消息给PlayerActor */
-    const Message = 99;
-    /** @var int 获取房间状态 */
-    const GAME_GET_INFO = 98;
 
 
-    /** @var array 洗牌后储存的 */
-    private $pokerCard = [];
-    /** @var array 玩家列表 */
+    /**
+     * @var array 玩家列表
+     */
     private $playerList = [];
-    /** @var mixed 定时器id  扫描开始定时器、出牌定时器 */
-    private $timerId;
-    /** @var array 游戏开始后 每个玩家的牌 key为playerActorId */
-    private $playerCard = [];
-    /** @var array 三张地主牌 */
-    private $richCards = [];
-    /** @var int 房间倍数 默认1倍 */
-    private $multiple = 1;
-    /** @var mixed 当前操作用户 */
+    /**
+     * @var mixed 当前操作用户
+     */
     private $nowPlayer;
-    /** @var mixed 地主玩家 */
+    /**
+     * @var mixed 上一回合谁赢
+     */
+    private $win_player_before_round;
+    /**
+     * @var mixed 地主玩家
+     */
     private $richPlayer;
 
+    // ==================== 玩家信息 ==================
+
+    /**
+     * @var array 游戏开始后 每个玩家的牌 key为playerActorId
+     */
+    private $playerCard = [];
+    /**
+     * @var array 三张地主牌
+     */
+    private $richCards = [];
+
+    // ==================== 卡牌信息 ==================
+
+    /**
+     * @var int 房间倍数 默认1倍
+     */
+    private $multiple = 1;
+    /**
+     * @var int 已经玩了几回合
+     */
+    private $play_round = 1;
+
+    // ==================== 房间信息 结算等场景用 ==================
+
+    /**
+     * @var mixed 定时器id  扫描开始定时器、出牌定时器
+     */
+    private $timerId;
     /** @var int 每轮操作的间隔 */
-    const PERIOD_TIME = 10;
+    private $period_time = 25;
+
+    /** @var string 等待开始 */
+    const ROOM_STATUS_WAIT_START = "wait_start";
+    /** @var string 游戏中 */
+    const ROOM_STATUS_START = "start";
+    /** @var string 叫地主中 */
+    const ROOM_STATUS_CALL_RICH = "call_rich";
+    /** @var string 决定明牌中 */
+    const ROOM_STATUS_SHOW_CARD = "show_card";
+    /** @var string 出牌中 */
+    const ROOM_STATUS_USE_CARD = "use_card";
+
+    /** @var string 房间状态 */
+    private $room_status = self::ROOM_STATUS_WAIT_START;
+    /** @var bool 当前房间状态是否可以过牌 */
+    private $can_pass = true;
+    /** @var mixed 上一回合出牌人 */
+    private $before_use_card_player;
+    /** @var array 上一回合出牌内容 */
+    private $before_use_card_list = [];
+
+    // ==================== 房间信息 设置参数等 ==================
+    private $rich_round = 0;
+    /**
+     * 牌型验证器
+     * @var \App\Utils\DdzPokerCardValidate
+     */
+    private $pokerCardValidate;
+
 
     public static function configure(ActorConfig $actorConfig)
     {
@@ -83,117 +145,31 @@ class RoomActor extends AbstractActor
 
     protected function onStart()
     {
-        // echo "房间初始化\n";
         // 房间创建后 每1秒检测一次是否可以开始
-        $this->timerId = Timer::getInstance()->loop(1, function () {
+        $this->timerId = Timer::getInstance()->loop(1000, function () {
             if (count($this->playerList) < 3) {
                 return FALSE;
             }
             Timer::getInstance()->clear($this->timerId);
-            $this->shufflePoker();
             $this->start();
             return TRUE;
         });
+        $this->pokerCardValidate = DdzPokerCardValidate::make($this);
     }
 
     /**
      * @param Command $msg
-     * @return mixed
      */
     protected function onMessage($msg)
     {
-        if (!($msg instanceof Command)) {
-            return FALSE;
+        if (!($msg instanceof Command)){
+            return null;
         }
+        $action = $msg->getDo();
+        // TODO 校验权限，是否为游戏玩家，是否为当前操作玩家
 
-        switch ($msg->getDo()) {
-            case PlayerActor::JOIN_ROOM: // 进入房间
-                if (count($this->playerList) >= 3){
-                    return false;
-                }
-                if (in_array($msg->getData()['player'], $this->playerList)){
-                    return false;
-                }
-                $this->playerList[] = $msg->getData()['player'];
-                break;
-            case PlayerActor::QUIT_ROOM: // 退出房间
-                // 未开始则删除
-                // todo 开始了则更改为托管状态
-                $index = array_search($msg->getData()['player'], $this->playerList);
-                if ($index){
-                    unset($this->playerList[$index]);
-                }
-                $playerQuitCommand = new Command();
-                $playerQuitCommand->setDo(self::GAME_QUIT_PLAYER);
-                $playerQuitCommand->setData([
-                    'player' => $msg->getData()['player']
-                ]);
-                $send[] = $playerQuitCommand;
-                break;
-
-            case PlayerActor::CALL_RICH: // 叫地主
-                $this->clearTimer();
-                if (!$this->canDo($msg->getData()['actorId'])) return FALSE;
-
-                if ($msg->getData()['result'] === TRUE) {
-                    $send   = [];
-                    $this->multiple = $this->multiple * 2;
-
-                    $this->richPlayer = $msg->getData()['actorId'];
-                    $this->multiple   = $this->multiple * 2;
-                    $multipleCommand  = new Command();
-                    $multipleCommand->setDo(self::GAME_ADD_MULTIPLE);
-                    $multipleCommand->setData([
-                        'multiple' => 2
-                    ]);
-                    $send[] = $multipleCommand;
-
-                    $playerQuitCommand = new Command();
-                    $playerQuitCommand->setDo(self::GAME_CALL_RICH);
-                    $playerQuitCommand->setData([
-                        'player' => $this->richPlayer
-                    ]);
-                    $send[] = $playerQuitCommand;
-
-                    $showCardCommand = new Command();
-                    $showCardCommand->setDo(self::GAME_SHOW_LANDLOAD_CARD);
-                    $showCardCommand->setData([
-                        'cards' => $this->richCards
-                    ]);
-                    $send[] = $showCardCommand;
-
-                    foreach ($this->richCards as $card) {
-                        $this->playerCard[$this->richPlayer][] = $card;
-                    }
-
-                    $this->sendToPlayer($send);
-                } else {
-                    // todo 需要记录重开次数、已经操作的人；如果全部不叫则重开，重开3次则最后一个玩家强制当地主
-                }
-
-                break;
-            //
-            // case PlayerActor::SEND_CARD:
-            //     // todo 判断出牌是否符合逻辑、是否玩家拥有所有牌；
-            //     // 是则删除剩余牌
-            //     // 是否增加倍数
-            //     // 判断是否胜利
-            //     // 胜利则结算
-            //     break;
-
-            case PlayerActor::PASS_CADR:
-                break;
-            /** 获取房间状态：玩家信息、准备状态 */
-            case self::GAME_GET_INFO:
-                $command = new Command();
-                $command->setDo(PlayerActor::GET_INFO);
-                $replyData = $this->sendToPlayer([$command]);
-                break;
-        }
-
-        if (isset($replyData)){
-            return $replyData;
-        }
+        $this->$action($msg->getData());
+        WsHelper::defer_push();
     }
 
     protected function onExit($arg)
@@ -203,63 +179,173 @@ class RoomActor extends AbstractActor
 
     protected function onException(\Throwable $throwable)
     {
-        // TODO: Implement onException() method.
     }
 
     /**
-     * 洗牌
+     * 玩家加入房间
+     * @param $data
+     */
+    private function do_join_player($data)
+    {
+        if (count($this->playerList) >= 3){
+            return ;
+        }
+        if (in_array($data['userId'], $this->playerList)){
+            return ;
+        }
+        $this->playerList[] = $data['userId'];
+    }
+
+    /**
+     * 玩家操作出牌
+     * @param $data
+     */
+    private function player_use_card($data)
+    {
+        $user_id    = $data['userId'];
+        $card_array = $data['card_list'];
+
+        // 验证牌类型
+        if ($this->pokerCardValidate->validate_type($card_array) === false){
+            $this->_push_one($user_id, Command::make(self::GAME_NOTICE,[
+                'msg' => '牌型错误'
+            ]));
+            return ;
+        }
+
+        // 验证牌是玩家拥有的
+
+        // 验证牌大小 可能会抛出异常 牌类型错误
+        try {
+            $temp_before_use_card_list = $this->before_use_card_list;
+            if ($this->before_use_card_player === $user_id){
+                $temp_before_use_card_list = [];
+            }
+            if (!$this->pokerCardValidate->validate_big($card_array, $temp_before_use_card_list)){
+                // 回推客户端 大小不符
+                $this->_push_one($user_id, Command::make(self::GAME_NOTICE,[
+                    'msg' => '出牌大小不符'
+                ]));
+                return ;
+            }
+        }catch (DdzPokerCardTypException $e){
+            // 回推客户端 不符合牌型
+            $this->_push_one($user_id, Command::make(self::GAME_NOTICE,[
+                'msg' => $e->getMessage()
+            ]));
+            return ;
+        }
+        $this->clearTimer();
+        $this->before_use_card_player = $user_id;
+        $this->before_use_card_list = $card_array;
+        $this->can_pass = true;// 有人出牌 下家就可以过牌了
+        $this->playerCard[$user_id] = array_diff($this->playerCard[$user_id], $card_array);
+        $this->nowPlayer = $user_id;
+
+        // 回推客户端 出牌成功
+        $this->_push_all(Command::make(self::GAME_PLAYER_USE_CARD,[
+            'user_id'    => $user_id,
+            'card_array' => $card_array
+        ]));
+        // 判断是否结束
+        if ( $this->can_settle() ){
+            var_dump("可以结算了");
+            $this->settle();
+            return;
+        }
+
+        // 轮到下一个人出牌
+        $next_user_id = $this->next_user();
+        $this->_push_all(Command::make(self::GAME_CHANGE_PLAYER_USE_CARD,[
+            'user_id'  => $next_user_id,
+            'can_pass' => $this->can_pass,
+            'endTime'  => $this->_get_end_time(function() use($next_user_id){
+                // 超时则默认处理叫地主 不叫
+                call_user_func([$this,'use_card_timeout'], [
+                    'userId' => $next_user_id,
+                ]);
+            }),
+        ]));
+
+    }
+
+    public function settle()
+    {
+        // 判断是农民还是地主赢
+        // 地主赢 加倍数*2 农民各减倍数*1
+        // 农民赢 加倍数*1 地主减倍数*2
+        $settle = [];
+        $rich_win = false;
+        if (count($this->playerCard[$this->richPlayer]) === 0){
+            $rich_win = true;
+        }
+        foreach ($this->playerList as $user_id){
+            if ($user_id == $this->richPlayer){
+                $settle[$user_id] = [
+                    'type' => $rich_win ? '+' : '-',
+                    'number'=> $this->multiple * 2,
+                ];
+            }else{
+                $settle[$user_id] =  [
+                    'type' => !$rich_win ? '+' : '-',
+                    'number'=> $this->multiple,
+                ];
+            }
+        }
+        $this->_push_all(Command::make(self::GAME_SETTLE, [
+            'settle' => $settle
+        ]));
+    }
+
+    /**
+     * 玩家过牌
+     */
+    private function player_pass_card($data)
+    {
+        $user_id = $data['userId'];
+        $this->clearTimer();
+
+        $this->nowPlayer = $user_id;
+        $next_user_id = $this->next_user();
+
+        // 如果上一回出牌的人为空，则不能pass，
+        // 如果上一回出牌的人是自己，（其他两家pass）则不能pass
+        if (!$this->before_use_card_player || ($this->before_use_card_player === $user_id)){
+            $this->can_pass = false;
+        }else{
+            $this->can_pass = true;
+        }
+
+        $this->_push_all(Command::make(self::GAME_CHANGE_PLAYER_USE_CARD, [
+            'user_id'  => $next_user_id,
+            'can_pass' => $this->can_pass,
+            'endTime'  => $this->_get_end_time(function() use($next_user_id){
+                // 超时则默认处理叫地主 不叫
+                call_user_func([$this,'use_card_timeout'], [
+                    'userId' => $next_user_id,
+                ]);
+            }),
+        ]));
+    }
+
+    /**
+     * 洗牌、发牌
      */
     private function shufflePoker()
     {
-        // 先组合整副牌
-        // h -> 黑桃
-        // c -> 红桃
-        // d -> 方片
-        // s -> 梅花
-        // $all = [
-        //     'HA', 'H2', 'H3', 'H4', 'H5', 'H6', 'H7', 'H8', 'H9', 'H10', 'HJ', 'HQ', 'HK',
-        //     'SA', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8', 'S9', 'S10', 'SJ', 'SQ', 'SK',
-        //     'DA', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8', 'D9', 'D10', 'DJ', 'DQ', 'DK',
-        //     'CA', 'C2', 'C3', 'C4', 'C5', 'C6', 'C7', 'C8', 'C9', 'C10', 'CJ', 'CQ', 'CK',
-        //     'W1', 'W2'// 1小王 2大王
-        // ];
-        $all = [
-            'H3', 'H4', 'H5', 'H6', 'H7', 'H8', 'H9', 'H10', 'H11', 'H12', 'H13', 'H14', 'H15',
-            'S3', 'S4', 'S5', 'S6', 'S7', 'S8', 'S9', 'S10', 'S11', 'S12', 'S13', 'S14', 'S15',
-            'D3', 'D4', 'D5', 'D6', 'D7', 'D8', 'D9', 'D10', 'D11', 'D12', 'D13', 'D14', 'D15',
-            'C3', 'C4', 'C5', 'C6', 'C7', 'C8', 'C9', 'C10', 'C11', 'C12', 'C13', 'C14', 'C15',
-            'W16', 'W17'// 1小王 2大王
-        ];
-        shuffle($all);
-        shuffle($all);
-        $this->pokerCard = $all;
+        var_dump("发牌\n");
+        $pokerCard = PokerCard::make();
         // 分割成三份基础牌
-        $tem = array_chunk($all, 17);
+        $tem = array_chunk($pokerCard, 17);
 
         foreach ($this->playerList as $key => $player) {
             // 排序
-            $final                     = $this->sortPorker($tem[$key]);
+            $final                     = PokerCard::sort($tem[$key]);
             $this->playerCard[$player] = $final;
+            // 告诉PlayerActor发牌
+            $this->_push_one($player, Command::make(PlayerActor::GET_CARD, $final));
         }
-        $this->richCards = $this->sortPorker($tem[3]);
-
-        // $c = ['H','S','D','C'];
-        // $n = [1,2,3,4,5,6,7,8,9,10,11,12,13];
-        // for ($i=0; $i<4 ; $i++){
-        //     for ($j = 0; $j < 13; $j++){
-        //            if ($n[$j] === 1){
-        //                $all[] = "{$c[$i]}A";
-        //            }else if ($n[$j] === 11){
-        //                $all[] = "{$c[$i]}J";
-        //            }else if ($n[$j] === 12){
-        //                $all[] = "{$c[$i]}Q";
-        //            }else if ($n[$j] === 13){
-        //                $all[] = "{$c[$i]}K";
-        //            }else{
-        //                $all[] = "{$c[$i]}{$n[$j]}";
-        //            }
-        //     }
-        // }
+        $this->richCards = PokerCard::sort($tem[3]);
     }
 
     /**
@@ -267,83 +353,148 @@ class RoomActor extends AbstractActor
      */
     private function start()
     {
-        echo "游戏开始\n";
-        // 通知游戏开始
-        $ws = new WsCommand();
-        $ws->setClass("game");
-        $ws->setAction("start");
+        var_dump("游戏开始\n");
+        // 游戏开始
+        $this->_push_all(Command::make(self::GAME_START, [
+            'player_info_list' => $this->playerList//TODO 整理一下格式，作为前端格式
+        ]));
+        $this->room_status = self::ROOM_STATUS_START;
 
-        $command = new Command();
-        $command->setDo(self::Message);
-        $command->setData($ws);
-        $this->sendToPlayer([$command]);
+        // 洗牌发牌
+        $this->shufflePoker();
 
-        // 叫地主的人 第一次就第一个，后面的就谁赢了谁先叫
-        $firstPlayerId = $this->playerList[0];
+        // 通知叫地主
+        var_dump("计算谁叫地主");
+        $this->room_status = self::ROOM_STATUS_CALL_RICH;
+        $this->rich_round++;
+        $user_id = $this->who_call_rich_first();
+        $this->notice_call_rich($user_id);
 
-        foreach ($this->playerList as $player) {
-            // 发基础牌
-            $command = new Command();
-            $command->setDo(self::GAME_SEND_CARD);
-            $command->setData($this->playerCard[$player]);
-            $send   = [];
-            $send[] = $command;
-            // 通知哪个玩家叫地主
-            $ws = new WsCommand();
-            $ws->setClass("game");
-            $ws->setAction("ask_call_rich");
-            $ws->setData([
-                'player'=>$firstPlayerId
-            ]);
+        WsHelper::defer_push();
+    }
 
-            $callLandLoad = new Command();
-            $callLandLoad->setDo(self::Message);
-            $callLandLoad->setData($ws);
+    /**
+     * 玩家操作叫地主
+     */
+    private function call_rich($data): bool
+    {
+        $user_id = $data['userId'];
+        $is_call = $data['result'];
+        var_dump($user_id."操作叫地主：", $is_call);
+        $this->clearTimer();
+        if($is_call){
+            // 倍数基本信息处理
+            $this->multiple = $this->multiple * 2;
+            $this->richPlayer = $user_id;
 
-            $send[] = $callLandLoad;
-            try {
-                $playerActorId = Cache::getInstance()->get("player_{$player}");
-                PlayerActor::client()->send($playerActorId, $send);
-            } catch (InvalidActor $e) {
-                // 通知失败 游戏结束
+            // 牌合并
+            foreach ($this->richCards as $card){
+                $this->playerCard[$this->richPlayer][] = $card;
             }
+            $this->playerCard[$this->richPlayer] = PokerCard::sort($this->playerCard[$this->richPlayer]);
+
+            // TODO 抢地主逻辑
+
+            // 广播 倍数、谁是地主、地主牌
+            $this->_push_all(Command::make(self::GAME_CHANGE_MULTIPLE, [
+                'multiple' => $this->multiple
+            ]));
+            $this->_push_all(Command::make(self::GAME_CHANGE_RICH, [
+                'user_id' => $this->richPlayer
+            ]));
+            $this->_push_all(Command::make(self::GAME_SHOW_RICH_CARD, [
+                'card' => $this->richCards
+            ]));
+            // 是否要明牌
+            $this->room_status = self::ROOM_STATUS_SHOW_CARD;
+
+            // 轮到谁出牌 地主不能pass
+            $this->can_pass = false;
+            $this->_push_all(Command::make(self::GAME_CHANGE_PLAYER_USE_CARD, [
+                'user_id'  => $this->richPlayer,
+                'can_pass' => $this->can_pass,
+                'endTime'  => $this->_get_end_time(function() use($user_id){
+                    // 超时则默认处理叫地主 不叫
+                    call_user_func([$this,'use_card_timeout'], [
+                        'userId'   => $user_id,
+                        'is_first' => true,
+                    ]);
+                }),
+            ]));
+
+
+            // 私发 新的牌
+            $this->_push_one($this->richPlayer, Command::make(PlayerActor::GET_CARD, $this->playerCard[$this->richPlayer]));
+            WsHelper::defer_push();
+            return true;
         }
-        // 叫地主定时器
-        $this->timerId = Timer::getInstance()->after(self::PERIOD_TIME * 1000, function(){
-            echo "无人叫地主\n";
-        });
-        $this->nowPlayer = $firstPlayerId;
+
+        // 没叫地主
+        // 本轮叫地主还没结束，下一位
+        if ($this->next_user() !== $this->who_call_rich_first()){
+            $user_id = $this->next_user();
+            $this->notice_call_rich($user_id);
+            WsHelper::defer_push();
+            return true;
+        }
+
+        if ($this->rich_round > 1){
+            // 强制第一个玩家当地主
+            return $this->call_rich([
+                'userId' => $this->who_call_rich_first(),
+                'result' => true
+            ]);
+        }
+
+        // 如果已经是最后一个玩家了，则需要重发牌，计数
+        $this->start();
+        return true;
     }
 
     /**
-     * 扑克排序
-     * @param $cards
-     * @return array
+     * 通知用户叫地主
+     * @param $user_id
      */
-    private function sortPorker($cards)
+    private function notice_call_rich($user_id)
     {
-        $new = [];
-        foreach ($cards as $card) {
-            $new[] = [$card[0], substr($card, 1)];
-        }
-
-        usort($new, 'sortPokerCard');
-        $final = [];
-        foreach ($new as $value) {
-            $final[] = $value[0].$value[1];
-        }
-        return $final;
+        var_dump($user_id);
+        $this->nowPlayer = $user_id;
+        $this->_push_all(Command::make(self::GAME_CALL_RICH, [
+            'userId'  => $user_id,
+            'test'    => "test",
+            'endTime' => $this->_get_end_time(function() use($user_id){
+                // 超时则默认处理叫地主 不叫
+                call_user_func([$this,'call_rich'], [
+                    'userId' => $user_id,
+                    'result' => false,
+                ]);
+            }),
+        ]));
     }
 
     /**
-     * 是否为当前操作用户
-     * @param $playerActorId
-     * @return bool
+     * 玩家出牌超时
+     * T: v1直接不出跳过
+     * T: V2 智能计数 三次不出则AI托管
+     * @param $data
      */
-    private function canDo($playerActorId)
+    private function use_card_timeout($data)
     {
-        return $this->nowPlayer == $playerActorId;
+        // 当前房间状态不能过牌的，超时则直接认输
+        if (!$this->can_pass){
+            var_dump($data['userId']);
+            echo "超时，当前不能过牌，直接认输";
+            // TODO
+        }else{
+            $this->player_pass_card($data);
+        }
+
     }
+
+
+    // =======================================================
+    //    ================  系统辅助   ======================
+    // =======================================================
 
     /**
      * 房间状态重置，在一局结束后清理
@@ -357,47 +508,78 @@ class RoomActor extends AbstractActor
         $this->multiple   = 1;
     }
 
-    /**
-     * 轮到下一个玩家，并且更改nowPlayer属性
-     * @return mixed|string
-     */
-    private function getNextPlayer()
-    {
-        $index = array_search($this->nowPlayer, $this->playerList);
-        if ($index === false){
-            return "";
-        }
-        if ($index===count($this->playerList) - 1){
-            $this->nowPlayer = $this->playerList[0];
-        }else{
-            $this->nowPlayer = $this->playerList[++$index];
-        }
-        return $this->nowPlayer;
-    }
-
     private function clearTimer()
     {
         Timer::getInstance()->clear($this->timerId);
     }
 
     /**
-     * 每一次通知必须是全部用户公平通知 不能私发
-     * @param $command
+     * 计算轮到谁叫地主
+     * T: 首轮则第一位玩家，后面则为上一回合赢的玩家
+     * T: 三家不叫则重发牌
+     * T: 不叫三回合则第一位玩家强制叫地主
      */
-    private function sendToPlayer(array $command)
+    private function who_call_rich_first()
     {
-        $return = [];
-        foreach ($this->playerList as $player) {
-            try {
-                $playerActorId = Cache::getInstance()->get("player_{$player}");
-                $reply = PlayerActor::client()->send($playerActorId, $command);
-                if ($reply !== null){
-                    $return[] = $reply;
-                }
-            } catch (InvalidActor $e) {
-                echo $e->getMessage().PHP_EOL;
-            }
+        if ($this->play_round === 1) {
+            $user_id = $this->playerList[0];
+        }else{
+            $user_id = $this->win_player_before_round;
         }
-        return $return;
+        return $user_id;
+    }
+
+    /**
+     * 下一个操作用户是谁
+     * @return mixed
+     */
+    private function next_user()
+    {
+        $before_player = $this->nowPlayer;
+        $before_index  = array_search($before_player, $this->playerList);
+
+        if ($before_index+1 === count($this->playerList)){
+            return $this->playerList[0];
+        }
+        return $this->playerList[++$before_index];
+    }
+
+    /**
+     * 返回此轮操作结束时间戳
+     * @param $timeout_event
+     * @return int
+     */
+    private function _get_end_time($timeout_event): int
+    {
+        // 注册超时定时器
+        $this->timerId = Timer::getInstance()->after($this->period_time * 1000, $timeout_event);
+        return $this->period_time;
+    }
+
+    /**
+     *广播消息
+     * @param $data
+     */
+    private function _push_all($data)
+    {
+        WsHelper::set_push_list(UserConnectInfoMap::userList_to_fdList($this->playerList), $data);
+    }
+
+    /**
+     * 私发消息
+     * @param $user_id
+     * @param $data
+     */
+    private function _push_one($user_id, $data){
+        WsHelper::set_push(UserConnectInfoMap::user_get_fd($user_id), $data);
+    }
+
+    private function can_settle()
+    {
+        // 任何一个人没牌了就可以结算
+        foreach ($this->playerCard as $user_id => $card_array){
+            if (count($card_array) === 0) return true;
+        }
+        return false;
     }
 }

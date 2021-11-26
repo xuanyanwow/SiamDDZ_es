@@ -8,6 +8,8 @@
 
 namespace App\WebSocket;
 
+use App\Utils\WsHelper;
+use EasySwoole\Component\Context\ContextManager;
 use EasySwoole\Socket\AbstractInterface\ParserInterface;
 use EasySwoole\Socket\Client\WebSocket;
 use EasySwoole\Socket\Bean\Caller;
@@ -57,6 +59,9 @@ class WsParser  implements ParserInterface
 
         // 设置被调用的Args
         $caller->setArgs($args ?? []);
+
+
+        WsHelper::register_defer();
         return $caller;
     }
     /**

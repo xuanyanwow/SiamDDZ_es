@@ -20,23 +20,24 @@ use EasySwoole\FastCache\Cache;
 class PlayerActor extends AbstractActor
 {
     /** @var int 加入房间 */
-    const JOIN_ROOM = 10000;
+    const JOIN_ROOM = "join_room";
     /** @var int 退出房间 */
-    const QUIT_ROOM = 10004;
+    const QUIT_ROOM = "quit_room";
     /** @var int 叫地主 */
-    const CALL_RICH = 10001;
+    const CALL_RICH = "call_rich";
     /** @var int 出牌 */
-    const USE_CARD = 10002;
+    const USE_CARD = "use_card";
     /** @var int 不出 */
-    const PASS_CADR = 10003;
+    const PASS_CADR = "pass_card";
     /** @var int 超级加倍 */
-    const DOUBLE_MULTIPLE = 10005;
+    const DOUBLE_MULTIPLE = "double_multiple";
     /** @var int 明牌 */
-    const OPEN_CADR = 10006;
+    const OPEN_CADR = "open_card";
     /** @var int 获取玩家状态 */
-    const GET_INFO = 10007;
+    const GET_INFO = "get_info";
+    /** @var int 得到牌 */
+    const GET_CARD = "get_card";
 
-    private $fd;
     private $userId;
     private $roomId;
     /** @var int 是否准备开始 */
@@ -58,79 +59,19 @@ class PlayerActor extends AbstractActor
 
     protected function onStart()
     {
-        $this->fd = $this->getArg()['fd'];
         $this->userId = $this->getArg()['userId'];
     }
 
-    protected function onMessage($msgs)
+    protected function onMessage($msg)
     {
         $send = [];
-        foreach ($msgs as $msg){
-            if (!($msg instanceof Command)){
-                return false;
-            }
-            // self:: 部分的 都是ws发过来操作 自己转发给room的
-            // RoomActor:: 部分的  都是Room处理完 要我们转发回前端的
-            switch ($msg->getDo()) {
-                case RoomActor::Message :
-                    $WsCommand = $msg->getData();
-
-                    if ($WsCommand){
-                        if (isset($send) && !empty($send)){
-                            if (is_array($WsCommand)){
-                                $send = array_merge($send, $WsCommand);
-                            }else{
-                                $send[] = $WsCommand;
-                            }
-                        }else{
-                            $send = $WsCommand;
-                        }
-                    }
-                    break;
-                case RoomActor::GAME_SEND_CARD:
-                    $this->cards = $msg->getData();
-                    $ws = new WsCommand();
-                    $ws->setClass("user");
-                    $ws->setAction("send_card");
-                    $ws->setData($this->cards);
-                    $send[] = $ws;
-                    break;
-
-                case self::GET_INFO:
-                    $replyData = [
-                        "userId"    => $this->userId,
-                        "isPrepare" => $this->isPrepare,
-                        "isOpen"    => $this->isOpen,
-                        "isDouble"  => $this->isDouble,
-                        "record"    => $this->record,
-                    ];
-                    break;
-
-                case self::JOIN_ROOM:
-                    $this->roomId = $msg->getData()['roomId'];
-                    $this->sendMyRoom($msg);
-                    break;
-
-                case self::CALL_RICH:
-                    $command = new Command();
-                    $command->setDo(self::CALL_RICH);
-                    $command->setData([
-                        'actorId' => $this->actorId(),
-                        'result'  => $msg->getData()['result'],
-                    ]);
-
-                    $this->sendMyRoom($command);
-                    break;
-
-            }
+        if (!($msg instanceof Command)){
+            return $send;
         }
-        if (!empty($send)){
-            ServerManager::getInstance()->getSwooleServer()->push($this->fd, json_encode($send, 256));
-        }
-        if (isset($replyData)){
-            return $replyData;
-        }
-        return true;
+        $action = $msg->getDo();
+        $send[] = $this->$action($msg->getData());
+
+        return $send;
     }
 
     protected function onExit($arg)
@@ -157,5 +98,15 @@ class PlayerActor extends AbstractActor
     {
         $roomActorId =  Cache::getInstance()->get("room_{$this->roomId}");
         RoomActor::client()->send($roomActorId, $msg);
+    }
+
+
+    public function join_room($data)
+    {
+    }
+
+    public function get_card($data)
+    {
+        echo $this->userId."获得牌".var_export($data,true) ."\n";
     }
 }

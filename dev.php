@@ -10,7 +10,9 @@ return [
         'SETTING' => [
             'worker_num' => 8,
             'reload_async' => true,
-            'max_wait_time'=>3
+            'max_wait_time'=>3,
+            'enable_static_handler'=>true,
+            'document_root' => EASYSWOOLE_ROOT."/Public",
         ],
         'TASK'=>[
             'workerNum'=>4,

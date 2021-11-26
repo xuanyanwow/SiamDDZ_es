@@ -14,8 +14,11 @@ namespace App\WebSocket;
 
 use App\Actor\Command;
 use App\Actor\PlayerActor;
+use App\Actor\RoomActor;
+use App\Repository\UserConnectInfoMap;
 use EasySwoole\FastCache\Cache;
 use EasySwoole\Socket\AbstractInterface\Controller;
+use EasySwoole\Spl\SplBean;
 
 
 class Game extends Controller
@@ -34,15 +37,15 @@ class Game extends Controller
         }
 
         $fd      = $this->caller()->getClient()->getFd();
-        $actorId = Cache::getInstance()->get("player_{$fd}");
-
-        $command = new Command();
-        $command->setDo(PlayerActor::JOIN_ROOM);
-        $command->setData([
-            'player' => $actorId,
+        $actorId = UserConnectInfoMap::fd_get_actor($fd);
+        $userId  = UserConnectInfoMap::fd_get_user($fd);
+;
+        PlayerActor::client()->send($actorId, Command::make(PlayerActor::JOIN_ROOM, [
             'roomId' => $roomId,
-        ]);
-        PlayerActor::client()->send($actorId, [$command]);
+        ]));
+        RoomActor::client()->send($roomActorId, Command::make(RoomActor::GAME_JOIN_PLAYER, [
+            'userId' => $userId
+        ]));
     }
 
     /**
@@ -80,26 +83,59 @@ class Game extends Controller
     /**
      * 是否叫地主
      */
-    public function callLandLoad()
+    public function call_rich()
     {
         $result = $this->caller()->getArgs()['result'] ?? false;
 
         $fd      = $this->caller()->getClient()->getFd();
-        $actorId = Cache::getInstance()->get("player_{$fd}");
+        // 通知房间叫地主的是谁
+        $roomId      = $this->caller()->getArgs()['roomId'];
+        $roomActorId = Cache::getInstance()->get("room_{$roomId}");
+        if (!$roomActorId) {
+            $this->response()->setMessage("房间不存在");
+        }
 
-        $command = new Command();
-        $command->setDo(PlayerActor::CALL_LANDLOAD);
-        $command->setData([
-            'result' => $result
-        ]);
-        PlayerActor::client()->send($actorId, [$command]);
+        $userId  = UserConnectInfoMap::fd_get_user($fd);
+        RoomActor::client()->send($roomActorId, Command::make(RoomActor::GAME_CALL_RICH, [
+            'userId' => $userId,
+            'result' => $result,
+        ]));
     }
 
     /**
      * 过牌
      */
-    public function passCards()
+    public function pass_card()
     {
+        $fd      = $this->caller()->getClient()->getFd();
+        $roomId      = $this->caller()->getArgs()['roomId'];
+        $roomActorId = Cache::getInstance()->get("room_{$roomId}");
+        if (!$roomActorId) {
+            $this->response()->setMessage("房间不存在");
+        }
 
+        $userId  = UserConnectInfoMap::fd_get_user($fd);
+        RoomActor::client()->send($roomActorId, Command::make(RoomActor::GAME_PLAYER_PASS_CARD, [
+            'userId' => $userId,
+        ]));
+    }
+
+    public function use_card()
+    {
+        $card_list = $this->caller()->getArgs()['card_list'] ?? [];
+        $card_list = json_decode($card_list, true);
+
+        $fd      = $this->caller()->getClient()->getFd();
+        $roomId      = $this->caller()->getArgs()['roomId'];
+        $roomActorId = Cache::getInstance()->get("room_{$roomId}");
+        if (!$roomActorId) {
+            $this->response()->setMessage("房间不存在");
+        }
+
+        $userId  = UserConnectInfoMap::fd_get_user($fd);
+        RoomActor::client()->send($roomActorId, Command::make(RoomActor::GAME_PLAYER_USE_CARD, [
+            'userId'    => $userId,
+            'card_list' => $card_list,
+        ]));
     }
 }
