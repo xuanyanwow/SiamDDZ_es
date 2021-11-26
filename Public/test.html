@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+
+    <title>斗地主UI版</title>
+    <link rel="stylesheet" href="https://unpkg.com/element-ui/lib/theme-chalk/index.css">
+    <style>
+        *{
+            margin: 0;
+            padding: 0;
+        }
+        #app{
+            position: relative;
+        }
+        #room_info{
+            width: 100%;
+            height: 30px;
+            position: absolute;
+            top: 0;
+            left: 0;
+            line-height: 30px;
+        }
+        #left_player_bd {
+            width: 70%;
+            height: 50%;
+            position: absolute;
+            left: 0;
+            top: 30px;
+            /*background: red;*/
+        }
+
+        #right_player_bd {
+            width: 70%;
+            height: 50%;
+            position: absolute;
+            right: 0;
+            top: 30px;
+            /*background: #000;*/
+        }
+
+        #button_bd {
+            width: 70%;
+            height: 100px;
+            position: absolute;
+            right: 15%;
+            bottom: 35%;
+            background: #7d5050;
+            z-index: 2
+        }
+
+        #card_list_bd {
+            width: 90%;
+            height: 300px;
+            position: absolute;
+            right: 5%;
+            bottom: 1%;
+            /*background: #b066e5;*/
+        }
+        .porke_card{
+            width:150px;
+            height:200px;
+            background: red;
+            border: 1px solid #fff;
+            position: absolute;
+            bottom: 0;
+        }
+        @media screen and (orientation: portrait) {
+            html{
+                width : 100vmin;
+                height : 100vmax;
+            }
+            body{
+                width : 95vmin;
+                height : 95vmax;
+            }
+            #app{
+                width : 95vmax;
+                height : 95vmin;
+                transform-origin: top left;
+                transform: rotate(90deg) translate(0,-100vmin);
+                padding:20px;
+            }
+            #card_list_bd {
+                height: 200px;
+            }
+            #button_bd {
+                height: 80px;
+                bottom: 45%;
+            }
+
+            .porke_card{
+                width: 7%;
+                height: 150px;
+            }
+        }
+        @media screen and (orientation: landscape) {
+            html{
+                width : 100vmax;
+                height : 100vmin;
+            }
+            body{
+                width : 100vmax;
+                height : 100vmin;
+            }
+            #app{
+                width : 100vmax;
+                height : 100vmin;
+                border: 1px solid #e2e2e2;
+                max-width: 1000px;
+                max-height: 600px;
+                margin:50px auto;
+                padding:20px;
+            }
+        }
+    </style>
+</head>
+<body>
+<div id="app">
+    <!--房间信息-->
+    <div id="room_info">
+        <div style="width:400px;margin:0 auto;text-align: center;">
+            倍数：1  底分：1
+        </div>
+    </div>
+    <!--左边玩家-->
+    <div id="left_player_bd">
+
+    </div>
+
+    <!--右玩家-->
+    <div  id="right_player_bd">
+
+    </div>
+
+    <!--按钮区-->
+    <div id="button_bd">
+
+    </div>
+
+    <!--选牌区-->
+    <div id="card_list_bd">
+<!--        pc间隔41  mb间隔30-->
+<!--        $e = 42;-->
+<!--        $number = 20;-->
+<!--        for($i=0; $i<$number;$i++){-->
+<!--        $string = '<div class="porke_card" style="left:'.$i*$e.'px;"></div>';-->
+<!--        echo $string.PHP_EOL;-->
+<!--        }-->
+
+<!--        TODO 解决动态居中的问题-->
+            <div class="porke_card" v-for="(card, key) in card_list" :label="card" :key="key"
+                 v-bind:style="{left:(key*42)+'px'}"
+            >
+                {{card}}
+            </div>
+    </div>
+</div>
+
+<!-- import Vue before Element -->
+<script src="https://unpkg.com/vue@2.6.14/dist/vue.js"></script>
+<!-- import JavaScript -->
+<script src="https://unpkg.com/element-ui/lib/index.js"></script>
+<script src="/common.js"></script>
+<script src="/message_parser.js"></script>
+<script src="/index.js"></script>
+</body>
+</html>

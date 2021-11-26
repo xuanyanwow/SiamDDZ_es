@@ -116,7 +116,7 @@ let vue_app = new Vue({
         },
         show_card(card)
         {
-            return "<img src='https://z3.ax1x.com/2021/11/26/oVMxVs.png'/>" + card;
+            return "" + card;
         }
     }
 
