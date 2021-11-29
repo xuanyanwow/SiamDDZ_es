@@ -32,7 +32,49 @@
             top: 30px;
             /*background: red;*/
         }
-
+        #left_player_bd .avtor{
+            width:100px;
+            height:100px;
+            /*background: red;*/
+            position: absolute;
+            left :0 ;
+            top: 100px;
+        }
+        .my_avtor{
+            width:100px;
+            height:100px;
+            /*background: red;*/
+            position: absolute;
+            left :0 ;
+            bottom: 40%;
+        }
+        .avtor_img{
+            border-radius: 50%;
+            width: 100%;
+            height: 100%;
+        }
+        .avtor .use_card_list{
+            width:500px;
+            height:100px;
+            /*background: #000;*/
+            position: absolute;
+            left: 120px;
+            bottom: 0;
+            display: flex;
+        }
+        #right_player_bd .avtor .use_card_list{
+            right: 120px;
+            left: unset;
+        }
+        /*展示区*/
+        .use_card_list .porke_card{
+            width: 60px;
+            height: 90px;
+            position: relative;
+        }
+        .use_card_list .porke_card:first-child{
+            left: 0;
+        }
         #right_player_bd {
             width: 70%;
             height: 50%;
@@ -41,6 +83,14 @@
             top: 30px;
             /*background: #000;*/
         }
+        #right_player_bd .avtor{
+            width:100px;
+            height:100px;
+            /*background: red;*/
+            position: absolute;
+            right :0 ;
+            top: 100px;
+        }
 
         #button_bd {
             width: 70%;
@@ -48,8 +98,16 @@
             position: absolute;
             right: 15%;
             bottom: 35%;
-            background: #7d5050;
-            z-index: 2
+            /*background: #7d5050;*/
+            z-index: 2;
+            display: flex;
+        }
+        #button_bd .button_one{
+            flex:1
+        }
+        .button_one .el-button{
+            margin:0 auto;
+            display: block;
         }
 
         #card_list_bd {
@@ -63,11 +121,34 @@
         .porke_card{
             width:150px;
             height:200px;
-            background: red;
-            border: 1px solid #fff;
+            background: #fff;
+            border: 1px solid #b5b2b2;
+            border-radius: 5px;
             position: absolute;
             bottom: 0;
+            z-index: 10;
+            padding:10px 3px;
         }
+        .poker_icon{
+            width:16px;
+            height:16px;
+        }
+        #rich_card_list{
+            width:200px;
+            height:100px;
+            position: absolute;
+            top: 30px;
+            left: calc(50% - 100px) ;
+            z-index: 30;
+            display: flex;
+        }
+        #rich_card_list .porke_card{
+            flex: 1;
+            width: 33%;
+            height: 90px;
+            position: relative;
+        }
+
         @media screen and (orientation: portrait) {
             html{
                 width : 100vmin;
@@ -93,7 +174,7 @@
             }
 
             .porke_card{
-                width: 7%;
+                width: 5%;
                 height: 150px;
             }
         }
@@ -123,39 +204,88 @@
     <!--房间信息-->
     <div id="room_info">
         <div style="width:400px;margin:0 auto;text-align: center;">
-            倍数：1  底分：1
+            倍数：{{multiple}}  底分：1
         </div>
     </div>
+    <!--房间信息-->
+    <div id="rich_card_list">
+        <div class="porke_card" v-for="card in rich_card_list">
+            <div v-html="_render_poker(card)"></div>
+        </div>
+    </div>
+
     <!--左边玩家-->
-    <div id="left_player_bd">
+    <div id="left_player_bd" v-if="left_player">
+        <div class="avtor">
+            <img :src="_get_avtor(left_player.role)" alt="" class="avtor_img">
+
+            <div class="use_card_list">
+                <div class="porke_card" v-for="card in player_use_card_map[left_player.user_id]">
+                    <div v-html="_render_poker(card)"></div>
+                </div>
+            </div>
+
+            <span style="position: relative;top:10px;">{{left_player.status_text}}</span>
+        </div>
 
     </div>
 
     <!--右玩家-->
-    <div  id="right_player_bd">
+    <div  id="right_player_bd" v-if="right_player">
+        <div class="avtor">
+            <img :src="_get_avtor(right_player.role)" alt="" class="avtor_img">
 
+            <div class="use_card_list">
+                <div class="porke_card" v-for="card in player_use_card_map[right_player.user_id]">
+                    <div v-html="_render_poker(card)"></div>
+                </div>
+            </div>
+
+            <span style="position: relative;top:10px;">{{right_player.status_text}}</span>
+        </div>
     </div>
+
 
     <!--按钮区-->
-    <div id="button_bd">
-
+    <div id="button_bd" v-if="now_player === userId">
+        <div class="button_one" v-if="room_status ==='wait_prepare'" @click="do_prepare(true)">
+            <el-button>准备</el-button>
+        </div>
+        <div class="button_one" v-if="room_status ==='call_rich'" @click="do_call_rich(true)">
+            <el-button>叫地主</el-button>
+        </div>
+        <div class="button_one" v-if="room_status ==='call_rich'" @click="do_call_rich(false)">
+            <el-button>不叫</el-button>
+        </div>
+        <div class="button_one" v-if="room_status ==='show_card'">
+            <el-button>明牌</el-button>
+        </div>
+        <div class="button_one" v-if="room_status ==='use_card'" @click="do_use_card()">
+            <el-button >出牌</el-button>
+        </div>
+        <div class="button_one" v-if="room_status ==='use_card' && can_pass" @click="do_pass_card()">
+            <el-button >不要</el-button>
+        </div>
     </div>
 
+    <!--自己的头像信息-->
+    <div class="avtor my_avtor" v-if="self_player">
+        <img :src="_get_avtor(self_player.role)" alt="" class="avtor_img">
+        <div class="use_card_list">
+            <div class="porke_card" v-for="card in player_use_card_map[userId]">
+                <div v-html="_render_poker(card)"></div>
+            </div>
+        </div>
+        <br>
+        <span style="position: relative;top:10px;">{{self_player.status_text}}</span>
+    </div>
     <!--选牌区-->
     <div id="card_list_bd">
-<!--        pc间隔41  mb间隔30-->
-<!--        $e = 42;-->
-<!--        $number = 20;-->
-<!--        for($i=0; $i<$number;$i++){-->
-<!--        $string = '<div class="porke_card" style="left:'.$i*$e.'px;"></div>';-->
-<!--        echo $string.PHP_EOL;-->
-<!--        }-->
-
-<!--        TODO 解决动态居中的问题-->
             <div class="porke_card" v-for="(card, key) in card_list" :label="card" :key="key"
-                 v-bind:style="{left:(key*42)+'px'}"
+                 v-bind:style="_auto_poker_card_style(key,card)"
+                 v-on:click="_check_porker_card(card)"
             >
-                {{card}}
+                <div v-html="_render_poker(card)"></div>
             </div>
     </div>
 </div>

@@ -81,6 +81,27 @@ class Game extends Controller
     }
 
     /**
+     * 准备
+     */
+    public function do_prepare()
+    {
+        $result = $this->caller()->getArgs()['result'] ?? false;
+
+        $fd      = $this->caller()->getClient()->getFd();
+
+        $roomId      = $this->caller()->getArgs()['roomId'];
+        $roomActorId = Cache::getInstance()->get("room_{$roomId}");
+        if (!$roomActorId) {
+            $this->response()->setMessage("房间不存在");
+        }
+
+        $userId  = UserConnectInfoMap::fd_get_user($fd);
+        RoomActor::client()->send($roomActorId, Command::make(RoomActor::GAME_PRE_START, [
+            'user_id' => $userId,
+            'result'  => $result,
+        ]));
+    }
+    /**
      * 是否叫地主
      */
     public function call_rich()

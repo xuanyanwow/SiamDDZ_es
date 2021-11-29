@@ -7,20 +7,35 @@ function message_parser(job)
     }
 }
 
+function game_get_info(data){
+    vue_app.room_status = data.room_status;
+    vue_app.player_info_list = data.player_info_list
+}
+function do_prepare(data)
+{
+    console.log("玩家准备");
+    if (data.user_id == vue_app.userId){
+        vue_app.room_status = "wait_start";
+    }
 
+    let player_info_list = vue_app.player_info_list;
+    for (let i = 0; i < player_info_list.length; i++) {
+        if(player_info_list[i].user_id !== data.user_id){
+            continue;
+        }
+        player_info_list[i].status_text = data.result ? "准备" : "";
+    }
+    vue_app.player_info_list = player_info_list;
+
+}
 function game_start(data){
     console.log("游戏开始")
-    console.log(data);
-    let player_info_list = data.player_info_list;
-    let temp = [];
+
+    let player_info_list = vue_app.player_info_list;
     for (let i = 0; i < player_info_list.length; i++) {
-        temp.push({
-            user_id: player_info_list[i],
-            role:"",
-            card_number:17,
-        })
+        player_info_list[i].status_text = "";
     }
-    vue_app.player_info_list = temp;
+    vue_app.player_info_list = player_info_list;
 }
 
 function get_card(data)
@@ -43,6 +58,21 @@ function change_multiple(data)
     console.log("倍数改变")
     console.log(data);
     vue_app.multiple = data.multiple
+}
+
+function player_index(user_id)
+{
+    let player_info_list = vue_app.player_info_list;
+    for (let i = 0; i < player_info_list.length; i++) {
+        if (player_info_list[i].user_id === user_id) return i;
+    }
+}
+
+function player_pass_card(data)
+{
+    let player_info_list = vue_app.player_info_list;
+    player_info_list[player_index(data.user_id)].status_text = "不出";
+    vue_app.player_info_list = player_info_list;
 }
 
 function change_rich(data)
@@ -77,6 +107,17 @@ function change_player_use_card(data)
     vue_app.now_player = data.user_id;
     vue_app.room_status = "use_card";
     vue_app.can_pass  = data.can_pass;
+    // 把出牌映射关掉
+    let player_use_card_map = vue_app.player_use_card_map;
+    player_use_card_map[data.user_id] = [];
+    vue_app.player_use_card_map = player_use_card_map;
+
+    // 提示关掉
+    let player_info_list = vue_app.player_info_list;
+    player_info_list[player_index(data.user_id)].status_text = "";
+    vue_app.player_info_list = player_info_list;
+
+
     _tick_time(data.endTime);
 }
 // 玩家出牌
@@ -99,6 +140,10 @@ function player_use_card(data){
     }
     vue_app.player_info_list = temp_player_list;
 
+    let player_use_card_map = vue_app.player_use_card_map;
+    player_use_card_map[data.user_id] = data.card_array;
+    vue_app.player_use_card_map = player_use_card_map;
+
 }
 
 function game_notice(data){
@@ -108,6 +153,7 @@ function game_notice(data){
 }
 
 function settle(data){
+    // TODO 计分板
     vue_app.$alert(JSON.stringify(data), '游戏结束', {
         confirmButtonText: '确定',
     });

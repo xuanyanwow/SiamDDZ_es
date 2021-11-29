@@ -53,11 +53,15 @@ class RoomActor extends AbstractActor
     /** @var int 玩家退出 */
     const GAME_QUIT_PLAYER = 2;
     /** @var int 玩家准备开始 */
-    const GAME_PRE_START = 3;
+    const GAME_PRE_START = "do_prepare";
     /** @var int 玩家取消准备 */
     const GAME_CANCEL_START = 4;
     /** @var int 游戏结束 */
     const GAME_END = 14;
+    /**
+     * @var string 获取房间信息（第一次加入和掉线的时候）
+     */
+    const GAME_GET_INFO = 'game_get_info';
 
 
     /**
@@ -76,6 +80,10 @@ class RoomActor extends AbstractActor
      * @var mixed 地主玩家
      */
     private $richPlayer;
+    /**
+     * @var int 已准备玩家
+     */
+    private $prepare_player_list = [];
 
     // ==================== 玩家信息 ==================
 
@@ -108,6 +116,8 @@ class RoomActor extends AbstractActor
     /** @var int 每轮操作的间隔 */
     private $period_time = 25;
 
+    /** @var string 等待准备 */
+    const ROOM_STATUS_WAIT_PREPARE = "wait_prepare";
     /** @var string 等待开始 */
     const ROOM_STATUS_WAIT_START = "wait_start";
     /** @var string 游戏中 */
@@ -120,7 +130,7 @@ class RoomActor extends AbstractActor
     const ROOM_STATUS_USE_CARD = "use_card";
 
     /** @var string 房间状态 */
-    private $room_status = self::ROOM_STATUS_WAIT_START;
+    private $room_status = self::ROOM_STATUS_WAIT_PREPARE;
     /** @var bool 当前房间状态是否可以过牌 */
     private $can_pass = true;
     /** @var mixed 上一回合出牌人 */
@@ -147,7 +157,7 @@ class RoomActor extends AbstractActor
     {
         // 房间创建后 每1秒检测一次是否可以开始
         $this->timerId = Timer::getInstance()->loop(1000, function () {
-            if (count($this->playerList) < 3) {
+            if (count($this->prepare_player_list) < 3) {
                 return FALSE;
             }
             Timer::getInstance()->clear($this->timerId);
@@ -194,6 +204,40 @@ class RoomActor extends AbstractActor
             return ;
         }
         $this->playerList[] = $data['userId'];
+
+
+        $player_info = [];
+        foreach ($this->playerList as $user_id){
+            $player_info[] = [
+                "user_id"     => (string) $user_id,
+                "role"        => "",
+                "card_number" => 0,
+                "status_text" => in_array($user_id, $this->prepare_player_list) ? "准备" : '',
+            ];
+        }
+        $this->_push_all(Command::make(self::GAME_GET_INFO, [
+            'room_status'      => $this->room_status,
+            'player_info_list' => $player_info,
+        ]));
+    }
+
+    private function do_prepare($data)
+    {
+        $user_id = $data['user_id'];
+        $result = $data['result'];
+        if ($result){
+            $this->prepare_player_list[] = $user_id;
+        }else{
+            // 删除已准备
+            $index = array_search($user_id, $this->prepare_player_list);
+            unset($this->prepare_player_list[$index]);
+        }
+
+        // 通知玩家 切换准备状态
+        $this->_push_all(Command::make(self::GAME_PRE_START,[
+            'user_id' => $user_id,
+            'result'  => $result,
+        ]));
     }
 
     /**
@@ -316,6 +360,9 @@ class RoomActor extends AbstractActor
             $this->can_pass = true;
         }
 
+        $this->_push_all(Command::make(self::GAME_PLAYER_PASS_CARD, [
+            'user_id' => $user_id,
+        ]));
         $this->_push_all(Command::make(self::GAME_CHANGE_PLAYER_USE_CARD, [
             'user_id'  => $next_user_id,
             'can_pass' => $this->can_pass,
@@ -355,9 +402,7 @@ class RoomActor extends AbstractActor
     {
         var_dump("游戏开始\n");
         // 游戏开始
-        $this->_push_all(Command::make(self::GAME_START, [
-            'player_info_list' => $this->playerList//TODO 整理一下格式，作为前端格式
-        ]));
+        $this->_push_all(Command::make(self::GAME_START, []));
         $this->room_status = self::ROOM_STATUS_START;
 
         // 洗牌发牌

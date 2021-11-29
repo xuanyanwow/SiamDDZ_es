@@ -27,3 +27,16 @@ function array_dive(aArr,bArr){ //第一个数组减去第二个数组
     }
     return diff;
 }
+function in_array(needle,array,bool){
+    if(typeof needle=="string"||typeof needle=="number"){
+        for(let i in array){
+            if(needle===array[i]){
+                if(bool){
+                    return i;
+                }
+                return true;
+            }
+        }
+        return false;
+    }
+}
