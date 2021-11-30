@@ -68,6 +68,8 @@ class DdzPokerCardValidateTest
         if ($validate->validate_type($card_list) !== DdzPokerCardValidate::KING_BOOM){
             echo "王炸测试\n";
         }
+        // 333 44 55
+        // 4567
     }
 
     public function test_big()

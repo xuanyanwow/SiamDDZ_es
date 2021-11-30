@@ -77,7 +77,11 @@ class DdzPokerCardValidate
 
         // 顺子   所有牌都只有1张 并且是连续的
         $shun_temp = array_count_values($count_values);
-        if (count($shun_temp) === 1 && isset($shun_temp[1]) && $shun_temp[1] === count($card_list)){
+        if (count($shun_temp) === 1
+            && isset($shun_temp[1])
+            && $shun_temp[1] === count($card_list)
+            && count($card_list) >= 5 // 五张以上
+        ){
             // 判断是否连续
             for ($i = 0; $i < (count($card_list) - 1); $i++){
                 if ((int) $card_list[$i+1] - 1 !==  (int)$card_list[$i]) return false;
@@ -128,7 +132,7 @@ class DdzPokerCardValidate
         }
 
         // 兼容多个3 不带
-        if (count($plane_temp) === 1 && $plane_temp[3] > 1 ) return self::TREE_PLANE;
+        if (count($plane_temp) === 1 && isset($plane_temp[3]) && $plane_temp[3] > 1 ) return self::TREE_PLANE;
         if (!isset($plane_temp[3])){// 3 4 4 错误牌
             return false;
         }

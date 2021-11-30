@@ -122,6 +122,7 @@ function change_player_use_card(data)
 }
 // 玩家出牌
 function player_use_card(data){
+    console.log(data);
     // 是自己则减去操作牌
     // 不是自己则添加记录 减去玩家剩余牌的数量
     if (data.user_id == vue_app.userId){

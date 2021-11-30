@@ -289,7 +289,8 @@ class RoomActor extends AbstractActor
         // 回推客户端 出牌成功
         $this->_push_all(Command::make(self::GAME_PLAYER_USE_CARD,[
             'user_id'    => $user_id,
-            'card_array' => $card_array
+            'card_array' => $card_array,
+            'card_type'  => $this->pokerCardValidate->validate_type($card_array)
         ]));
         // 判断是否结束
         if ( $this->can_settle() ){
@@ -324,6 +325,9 @@ class RoomActor extends AbstractActor
             $rich_win = true;
         }
         foreach ($this->playerList as $user_id){
+            if (count($this->playerCard[$user_id]) === 0) {
+                $this->win_player_before_round = $user_id;
+            }
             if ($user_id == $this->richPlayer){
                 $settle[$user_id] = [
                     'type' => $rich_win ? '+' : '-',
@@ -354,7 +358,7 @@ class RoomActor extends AbstractActor
 
         // 如果上一回出牌的人为空，则不能pass，
         // 如果上一回出牌的人是自己，（其他两家pass）则不能pass
-        if (!$this->before_use_card_player || ($this->before_use_card_player === $user_id)){
+        if (!$this->before_use_card_player || ($this->before_use_card_player === $next_user_id)){
             $this->can_pass = false;
         }else{
             $this->can_pass = true;
