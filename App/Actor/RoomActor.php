@@ -14,14 +14,9 @@ use App\Repository\UserConnectInfoMap;
 use App\Utils\DdzPokerCardValidate;
 use App\Utils\PokerCard;
 use App\Utils\WsHelper;
-use App\WebSocket\WsCommand;
 use EasySwoole\Actor\AbstractActor;
 use EasySwoole\Actor\ActorConfig;
-use EasySwoole\Actor\Exception\InvalidActor;
 use EasySwoole\Component\Timer;
-use EasySwoole\EasySwoole\ServerManager;
-use EasySwoole\FastCache\Cache;
-use EasySwoole\Utility\Time;
 
 class RoomActor extends AbstractActor
 {
@@ -207,10 +202,10 @@ class RoomActor extends AbstractActor
             ]));
             return ;
         }
-        if (count($this->playerList) >= 3){
-            return ;
-        }
-        if (in_array($data['userId'], $this->playerList)){
+        if (count($this->playerList) >= 3 && !in_array($data['userId'], $this->playerList)){
+            $this->_push_one($data['userId'], Command::make(self::GAME_NOTICE, [
+                'msg' => '该房间已经没有座位'
+            ]));
             return ;
         }
         $this->playerList[] = $data['userId'];

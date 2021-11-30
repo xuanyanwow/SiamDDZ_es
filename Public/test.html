@@ -65,6 +65,7 @@
         #right_player_bd .avtor .use_card_list{
             right: 120px;
             left: unset;
+            flex-direction: row-reverse;
         }
         /*展示区*/
         .use_card_list .porke_card{
@@ -248,23 +249,23 @@
 
     <!--按钮区-->
     <div id="button_bd" v-if="now_player === userId">
-        <div class="button_one" v-if="room_status ==='wait_prepare'" @click="do_prepare(true)">
-            <el-button>准备</el-button>
+        <div class="button_one" v-if="room_status ==='wait_prepare'">
+            <el-button  @click="do_prepare(true)">准备</el-button>
         </div>
-        <div class="button_one" v-if="room_status ==='call_rich'" @click="do_call_rich(true)">
-            <el-button>叫地主</el-button>
+        <div class="button_one" v-if="room_status ==='call_rich'" >
+            <el-button @click="do_call_rich(true)">叫地主</el-button>
         </div>
-        <div class="button_one" v-if="room_status ==='call_rich'" @click="do_call_rich(false)">
-            <el-button>不叫</el-button>
+        <div class="button_one" v-if="room_status ==='call_rich'" >
+            <el-button @click="do_call_rich(false)">不叫</el-button>
         </div>
         <div class="button_one" v-if="room_status ==='show_card'">
             <el-button>明牌</el-button>
         </div>
-        <div class="button_one" v-if="room_status ==='use_card'" @click="do_use_card()">
-            <el-button >出牌</el-button>
+        <div class="button_one" v-if="room_status ==='use_card'" >
+            <el-button @click="do_use_card()">出牌</el-button>
         </div>
-        <div class="button_one" v-if="room_status ==='use_card' && can_pass" @click="do_pass_card()">
-            <el-button >不要</el-button>
+        <div class="button_one" v-if="room_status ==='use_card' && can_pass" >
+            <el-button @click="do_pass_card()">不要</el-button>
         </div>
     </div>
 
