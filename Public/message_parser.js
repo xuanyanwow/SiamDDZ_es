@@ -181,3 +181,9 @@ function _tick_clear()
 {
     clearInterval(tick_id);
 }
+
+function reconnect()
+{
+    console.log("掉线重连...");
+    // TODO
+}

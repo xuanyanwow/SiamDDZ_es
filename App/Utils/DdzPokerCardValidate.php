@@ -5,7 +5,6 @@ namespace App\Utils;
 
 use App\Actor\RoomActor;
 use App\Exceptions\DdzPokerCardTypException;
-use Cassandra\Varint;
 
 /**
  * 斗地主扑克牌验证器
@@ -71,8 +70,8 @@ class DdzPokerCardValidate
 
         // 三带一、三带二 [3,1] 三带一  [3,2] 三带二
         if ($count_values_number[0] === 3){
-            if ($count_values_number[1] === 1) return self::TREE_WITH_ONE;
-            if ($count_values_number[1] === 2) return self::TREE_WITH_TWO;
+            if ($count_values_number[1] === 1 && count($card_list) === 4) return self::TREE_WITH_ONE;
+            if ($count_values_number[1] === 2 && count($card_list) === 5) return self::TREE_WITH_TWO;
         }
 
         // 顺子   所有牌都只有1张 并且是连续的

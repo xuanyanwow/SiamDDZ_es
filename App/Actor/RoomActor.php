@@ -30,6 +30,8 @@ class RoomActor extends AbstractActor
 
     /** @var int 玩家进入 */
     const GAME_JOIN_PLAYER = "do_join_player";
+    /** @var string 游戏进行中，重连 */
+    const GAME_PLAYING_RECONNECT= "reconnect";
     /** @var int 游戏开始 */
     const GAME_START = "game_start";
     /** @var int 玩家叫地主操作 */
@@ -197,6 +199,14 @@ class RoomActor extends AbstractActor
      */
     private function do_join_player($data)
     {
+        if ($this->room_status !== self::ROOM_STATUS_WAIT_START
+            && in_array($data['userId'], $this->playerList)
+        ){
+            $this->_push_one($data['userId'], Command::make(self::GAME_PLAYING_RECONNECT, [
+
+            ]));
+            return ;
+        }
         if (count($this->playerList) >= 3){
             return ;
         }

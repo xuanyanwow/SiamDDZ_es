@@ -1,6 +1,7 @@
 <?php
 include_once __DIR__."/../App/Utils/DdzPokerCardValidate.php";
 include_once __DIR__."/../App/Utils/PokerCard.php";
+include_once __DIR__."/../App/Exceptions/DdzPokerCardTypException.php";
 use App\Utils\DdzPokerCardValidate;
 
 class DdzPokerCardValidateTest
@@ -69,7 +70,15 @@ class DdzPokerCardValidateTest
             echo "王炸测试\n";
         }
         // 333 44 55
+        $card_list = [ 'A3','A3','A3', 'A4','A4','A5','A5'];
+        if ($validate->validate_type($card_list) !== false){
+            echo "通過了錯誤牌型\n";
+        }
         // 4567
+        $card_list = [ 'A4','A5','A6', 'A7'];
+        if ($validate->validate_type($card_list) !== false){
+            echo "通過了錯誤牌型\n";
+        }
     }
 
     public function test_big()
@@ -108,8 +117,13 @@ class DdzPokerCardValidateTest
         if ($validate->validate_big(['D4', 'D5', 'D6', 'D7','D8','D9'], ['D3', 'D4', 'D5', 'D6', 'D7']) !== false){
             echo "顺子数量不同，应该是错误";
         }
-        if ($validate->validate_big(['D11', 'D12', 'D13', 'D14','D15','H16'], ['D3', 'D4', 'D5', 'D6', 'D7']) !== false){
-            echo "顺子包含王 应该是错误";
+        try {
+            if ($validate->validate_big(['D11', 'D12', 'D13', 'D14', 'D15', 'H16'], ['D3', 'D4', 'D5', 'D6', 'D7']) !== false)
+            {
+                echo "顺子包含王 应该是错误";
+            }
+        } catch (\App\Exceptions\DdzPokerCardTypException $e) {
+            // 牌型錯誤 也是ok的
         }
 
 
@@ -142,5 +156,11 @@ class DdzPokerCardValidateTest
     }
 }
 
+try{
+
 (new DdzPokerCardValidateTest)->run();
 (new DdzPokerCardValidateTest)->test_big();
+
+}catch (Exception $exception){
+    echo $exception->getMessage()."\n";
+}
